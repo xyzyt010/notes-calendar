@@ -1,0 +1,63 @@
+[package]
+name = "notes"
+description = "Notes — fast, private, local-first notes for the yellod suite."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ycore.workspace = true
+slint.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+arboard = "3"
+dirs = "6"
+anyhow.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[build-dependencies]
+slint-build = "1.18.1"
+
+[features]
+default = []
+skia = ["slint/renderer-skia"]
+
+[lib]
+crate-type = ["lib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "notes"
+path = "src/main.rs"
+
+[package.metadata.android]
+package = "app.yellod.notes"
+apk_name = "Notes"
+min_sdk_version = 24
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Notes"
+
+[package.metadata.deb]
+name = "notes"
+maintainer = "yellod <hello@yellod.dpdns.org>"
+depends = "libfontconfig1, libgl1, libxkbcommon0"
+section = "utils"
+priority = "optional"
+assets = [
+    ["../../target/release/notes", "/usr/bin/notes", "755"],
+    ["../../assets/app-icon.png", "/usr/share/pixmaps/yellod-notes.png", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "notes"
+assets = [
+    { source = "../../target/release/notes", dest = "/usr/bin/notes", mode = "755" },
+]
+
+[profile.dev.build-override]
+opt-level = 3

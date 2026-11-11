@@ -1,0 +1,619 @@
+// yellod Notes — main window.
+// Top bar (menu / logo / search / view toggle / new) → rail + (optional sidebar) + list + editor.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import { AboutSlint } from "std-widgets.slint";
+import {
+    IconGhost, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash,
+    IconSettings, IconMoon, IconSun, IconLayoutGrid, IconList,
+    IconFileText, IconFolder, IconFolderPlus, IconTag,
+} from "../../shared-ui/icons.slint";
+import {
+    SearchBar, IconButton, RailButton, SidebarRow, Divider, ConfirmDialog,
+    Toast, NoteData, FolderData, TagData, TextButton, EmptyState,
+} from "../../shared-ui/components.slint";
+import { NoteListPanel } from "note-grid.slint";
+import { EditorPane } from "editor.slint";
+
+
+export component MainWindow inherits Window {
+    title: "Notes";
+    icon: @image-url("../../../assets/app-icon.png");
+    default-font-family: "Inter";
+    background: Theme.bg;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+
+    // ---------- Rust-facing state ----------
+    in-out property <bool> dark: true;
+    in-out property <[NoteData]> pinned-notes: [];
+    in-out property <[NoteData]> notes: [];
+    in-out property <[FolderData]> folders: [];
+    in-out property <[TagData]> tags: [];
+    in-out property <string> selected-id: "";
+    in-out property <int> active-view: 0;
+    in-out property <string> active-folder: "";
+    in-out property <string> active-tag: "";
+    in-out property <string> search-text: "";
+    in-out property <bool> list-view: false;
+    in-out property <int> note-count: 0;
+    in-out property <int> grid-cols: 4;
+    in-out property <bool> sidebar-open: false;
+    in-out property <bool> compact: false;
+    in-out property <bool> pinned-section: false;
+    in-out property <string> selected-folder-of-editor: "";
+    in-out property <bool> new-folder-open: false;
+    in-out property <string> new-folder-name: "";
+
+    // Editor state
+    in-out property <bool> has-note: false;
+    in-out property <string> editor-title: "";
+    in-out property <string> editor-body: "";
+    in-out property <[string]> editor-tags: [];
+    in-out property <bool> editor-pinned: false;
+    in-out property <bool> editor-favorite: false;
+    in-out property <int> word-count: 0;
+    in-out property <int> save-state: 0;
+    in-out property <string> edited-label: "";
+    in-out property <bool> folder-menu-open: false;
+
+    // Chrome state
+    in-out property <bool> show-settings: false;
+    in-out property <bool> show-delete-forever: false;
+    in-out property <bool> show-empty-trash: false;
+    in-out property <string> toast-message: "";
+    in-out property <bool> toast-visible: false;
+
+    // ---------- Rust-facing actions ----------
+    callback new-note();
+    callback search-changed(string);
+    callback view-selected(int);
+    callback folder-selected(string);
+    callback new-folder();
+    callback create-folder(string);
+    callback cancel-new-folder();
+    callback delete-folder(string);
+    callback tag-selected(string);
+    callback note-activated(string);
+    callback pin-toggled(string);
+    callback archive-editor();
+    callback trash-editor();
+    callback restore-editor();
+    callback delete-forever-confirmed();
+    callback empty-trash-confirmed();
+    callback copy-editor();
+    callback editor-content-changed();
+    callback tag-added(string);
+    callback tag-removed(string);
+    callback assign-folder(string);
+    callback toggle-sidebar();
+    callback toggle-view-mode();
+    callback toggle-theme();
+    callback toggle-pin-editor();
+    callback toggle-favorite-editor();
+    callback back-to-list();
+    callback window-resized(length);
+
+    changed width => { root.window-resized(self.width); }
+    changed dark => { Theme.dark = root.dark; }
+
+
+    toastTimer := Timer {
+        interval: 3.4s;
+        running: root.toast-visible;
+        triggered => { root.toast-visible = false; }
+    }
+
+    focus-scope := FocusScope {
+        init => { focus-scope.focus(); }
+        key-pressed(event) => {
+            if event.modifiers.control && event.text == "n" {
+                root.new-note();
+                return accept;
+            }
+            if event.modifiers.control && event.text == "f" {
+                search.input-focus();
+                return accept;
+            }
+            if event.text == "\u{1b}" {
+                if root.folder-menu-open { root.folder-menu-open = false; return accept; }
+                if root.search-text != "" { root.search-changed(""); return accept; }
+                if root.compact && root.has-note { root.back-to-list(); return accept; }
+                return accept;
+            }
+            reject
+        }
+
+        app := Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.bg;
+
+            VerticalLayout {
+                // ============ TOP BAR ============
+                Rectangle {
+                    height: Theme.topbar-height;
+                    background: Theme.bg;
+                    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+                    hamburgerBtn := IconButton {
+                        x: 10px;
+                        y: 11px;
+                        size: 42px;
+                        clicked => { root.toggle-sidebar(); }
+                        IconMenu { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                    }
+
+                    // Logo: ghost + wordmark (absolute, icons centered in sized slots)
+                    ghostLogoSlot := Rectangle {
+                        x: 64px;
+                        y: 17px;
+                        width: 30px;
+                        height: 30px;
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: center;
+                                IconGhost { preferred-width: 26px; preferred-height: 26px; stroke-color: Theme.accent; }
+                            }
+                        }
+                    }
+                    wordMark := Text {
+                        visible: root.width >= 560px;
+                        x: 104px;
+                        y: 0px;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        text: "Notes";
+                        font-size: 21px;
+                        font-weight: 600;
+                        color: Theme.text;
+                    }
+
+                    // Search — fixed position/width (window width bindings are unreliable pre-layout)
+                    searchWrap := Rectangle {
+                        x: 210px;
+                        y: 10px;
+                        width: 560px;
+                        height: 44px;
+                        visible: root.width >= 760px;
+                        VerticalLayout {
+                            alignment: center;
+                            search := SearchBar {
+                                text <=> root.search-text;
+                                width: 100%;
+                                submitted => { root.search-changed(root.search-text); }
+                                cleared => { root.search-changed(""); }
+                            }
+                        }
+                    }
+
+                    viewToggleBtn := IconButton {
+                        x: 786px;
+                        y: 11px;
+                        size: 42px;
+                        clicked => { root.toggle-view-mode(); }
+                        if root.list-view:
+                            IconLayoutGrid { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                        if !root.list-view:
+                            IconList { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                    }
+
+                    // New note — accent filled circle
+                    newNoteBtn := Rectangle {
+                        x: 836px;
+                        y: 11px;
+                        width: 42px;
+                        height: 42px;
+                        border-radius: 21px;
+                        background: Theme.accent;
+                        newTouch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.new-note(); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout { alignment: center; IconPlus { stroke-color: Theme.on-accent; preferred-width: 22px; preferred-height: 22px; } }
+                        }
+                    }
+                }
+
+                // ============ MAIN ROW ============
+                HorizontalLayout {
+                    spacing: 0px;
+
+                    // ---- Left icon rail ----
+                    Rectangle {
+                        width: Theme.rail-width;
+                        background: Theme.bg;
+
+                        VerticalLayout {
+                            padding-top: 12px;
+                            spacing: 4px;
+
+                            RailButton { label: "Notes"; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == ""; clicked => { root.view-selected(0); }
+                                IconFileText { stroke-color: (root.active-view == 0 && root.active-folder == "" && root.active-tag == "") ? Theme.accent : Theme.text-dim; preferred-width: 22px; preferred-height: 22px; } }
+                            RailButton { label: "Pinned"; selected: root.active-view == 1; clicked => { root.view-selected(1); }
+                                IconPin { stroke-color: root.active-view == 1 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                            RailButton { label: "Favorites"; selected: root.active-view == 2; clicked => { root.view-selected(2); }
+                                IconStar { stroke-color: root.active-view == 2 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                            RailButton { label: "Archive"; selected: root.active-view == 3; clicked => { root.view-selected(3); }
+                                IconArchive { stroke-color: root.active-view == 3 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                            RailButton { label: "Trash"; selected: root.active-view == 4; clicked => { root.view-selected(4); }
+                                IconTrash { stroke-color: root.active-view == 4 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+
+                            Rectangle {} // spring
+
+                            Divider { width: 44px; x: 14px; }
+
+                            RailButton { label: Theme.dark ? "Light" : "Dark"; clicked => { root.toggle-theme(); }
+                                if Theme.dark:
+                                    IconSun { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                                if !Theme.dark:
+                                    IconMoon { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                            }
+                            RailButton { label: "Settings"; clicked => { root.show-settings = true; }
+                                IconSettings { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                        }
+                    }
+
+                    // ---- Folder sidebar ----
+                    if root.sidebar-open:
+                        Rectangle {
+                            width: Theme.sidebar-width;
+                            background: Theme.bg;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 2px;
+
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    height: 32px;
+                                    Text { text: "FOLDERS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+                                    IconButton { size: 27px; clicked => { root.new-folder(); }
+                                        IconFolderPlus { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+                                }
+
+                                // New-folder inline input
+                                if root.new-folder-open:
+                                    folderInputRow := Rectangle {
+                                        height: 38px;
+                                        border-radius: Theme.r-md;
+                                        background: Theme.surface-2;
+                                        folderInput := TextInput {
+                                            x: 12px;
+                                            width: parent.width - 48px;
+                                            height: 100%;
+                                            single-line: true;
+                                            font-size: 13.5px;
+                                            color: Theme.text;
+                                            vertical-alignment: center;
+                                            text <=> root.new-folder-name;
+                                            selection-background-color: Theme.accent-soft;
+                                            key-pressed(event) => {
+                                                if event.text == "\n" {
+                                                    root.create-folder(self.text);
+                                                    return accept;
+                                                }
+                                                if event.text == "\u{1b}" {
+                                                    root.cancel-new-folder();
+                                                    return accept;
+                                                }
+                                                reject
+                                            }
+                                        }
+                                        if root.new-folder-name == "":
+                                            Text {
+                                                x: 12px;
+                                                height: 100%;
+                                                vertical-alignment: center;
+                                                text: "Folder name…";
+                                                font-size: 13px;
+                                                color: Theme.text-faint;
+                                            }
+                                        Text {
+                                            x: parent.width - 26px;
+                                            height: 100%;
+                                            vertical-alignment: center;
+                                            text: "⏎";
+                                            font-size: 14px;
+                                            color: Theme.text-faint;
+                                        }
+                                    }
+
+                                for folder[fi] in root.folders:
+                                    folderRow := SidebarRow {
+                                        label: folder.name;
+                                        meta: folder.meta;
+                                        selected: root.active-folder == folder.id;
+                                        show-delete: true;
+                                        clicked => { root.folder-selected(folder.id); }
+                                        delete => { root.delete-folder(folder.id); }
+                                        IconFolder { stroke-color: folderRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
+                                    }
+
+                                Rectangle { height: 14px; }
+
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    height: 32px;
+                                    Text { text: "TAGS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; }
+                                }
+                                for tag[ti] in root.tags:
+                                    tagRow := SidebarRow {
+                                        label: "#  " + tag.name;
+                                        meta: tag.meta;
+                                        selected: root.active-tag == tag.name;
+                                        clicked => { root.tag-selected(tag.name); }
+                                        IconTag { stroke-color: tagRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 15px; preferred-height: 15px; }
+                                    }
+
+                                Rectangle {} // spring
+                                Divider {}
+                                Text {
+                                    text: "Everything is stored locally on this device.";
+                                    font-size: 11px;
+                                    color: Theme.text-faint;
+                                    wrap: word-wrap;
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    padding-top: 8px;
+                                    padding-bottom: 4px;
+                                }
+                            }
+                        }
+
+                    if root.sidebar-open:
+                        Rectangle { width: 1px; background: Theme.border; }
+
+                    // ============ CONTENT ============
+                    // Compact: list XOR editor. Desktop: list pane + editor pane.
+                    if root.compact && !root.has-note:
+                            NoteListPanel {
+                                horizontal-stretch: 1;
+                                pinned-notes: root.pinned-notes;
+                                notes: root.notes;
+                                list-view: root.list-view;
+                                selected-id: root.selected-id;
+                                view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES"))
+                                    : root.active-view == 1 ? "PINNED"
+                                    : root.active-view == 2 ? "FAVORITES"
+                                    : root.active-view == 3 ? "ARCHIVE"
+                                    : "TRASH";
+                                active-view: root.active-view;
+                                search-text: root.search-text;
+                                columns: 1;
+                                pinned-section: root.pinned-section;
+                                note-count: root.note-count;
+                                card-clicked(id) => { root.note-activated(id); }
+                                pin-toggled(id) => { root.pin-toggled(id); }
+                                ask-empty-trash => { root.show-empty-trash = true; }
+                            }
+                    if root.compact && root.has-note:
+                            EditorPane {
+                                horizontal-stretch: 1;
+                                compact: true;
+                                editor-title <=> root.editor-title;
+                                editor-body <=> root.editor-body;
+                                editor-tags <=> root.editor-tags;
+                                editor-pinned <=> root.editor-pinned;
+                                editor-favorite <=> root.editor-favorite;
+                                word-count <=> root.word-count;
+                                save-state <=> root.save-state;
+                                edited-label <=> root.edited-label;
+                                folder-menu-open <=> root.folder-menu-open;
+                                in-trash: root.active-view == 4;
+                                in-archive: root.active-view == 3;
+                                folders: root.folders;
+                                current-folder: root.selected-folder-of-editor;
+                                content-changed => { root.editor-content-changed(); }
+                                toggle-pin => { root.toggle-pin-editor(); }
+                                toggle-favorite => { root.toggle-favorite-editor(); }
+                                toggle-archive => { root.archive-editor(); }
+                                toggle-trash => { root.trash-editor(); }
+                                restore => { root.restore-editor(); }
+                                delete-forever => { root.show-delete-forever = true; }
+                                copy-note => { root.copy-editor(); }
+                                tag-added(text) => { root.tag-added(text); }
+                                tag-removed(text) => { root.tag-removed(text); }
+                                assign-folder(id) => { root.assign-folder(id); }
+                                back => { root.back-to-list(); }
+                            }
+
+                    if !root.compact:
+                        NoteListPanel {
+                            width: 384px;
+                            pinned-notes: root.pinned-notes;
+                            notes: root.notes;
+                            list-view: root.list-view;
+                            selected-id: root.selected-id;
+                            view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES"))
+                                : root.active-view == 1 ? "PINNED"
+                                : root.active-view == 2 ? "FAVORITES"
+                                : root.active-view == 3 ? "ARCHIVE"
+                                : "TRASH";
+                            active-view: root.active-view;
+                            search-text: root.search-text;
+                            columns: root.grid-cols;
+                            pinned-section: root.pinned-section;
+                            note-count: root.note-count;
+                            card-clicked(id) => { root.note-activated(id); }
+                            pin-toggled(id) => { root.pin-toggled(id); }
+                            ask-empty-trash => { root.show-empty-trash = true; }
+                        }
+                    if !root.compact:
+                        Rectangle { width: 1px; background: Theme.border; }
+                    if !root.compact && root.has-note:
+                            EditorPane {
+                                horizontal-stretch: 1;
+                                compact: false;
+                                editor-title <=> root.editor-title;
+                                editor-body <=> root.editor-body;
+                                editor-tags <=> root.editor-tags;
+                                editor-pinned <=> root.editor-pinned;
+                                editor-favorite <=> root.editor-favorite;
+                                word-count <=> root.word-count;
+                                save-state <=> root.save-state;
+                                edited-label <=> root.edited-label;
+                                folder-menu-open <=> root.folder-menu-open;
+                                in-trash: root.active-view == 4;
+                                in-archive: root.active-view == 3;
+                                folders: root.folders;
+                                current-folder: root.selected-folder-of-editor;
+                                content-changed => { root.editor-content-changed(); }
+                                toggle-pin => { root.toggle-pin-editor(); }
+                                toggle-favorite => { root.toggle-favorite-editor(); }
+                                toggle-archive => { root.archive-editor(); }
+                                toggle-trash => { root.trash-editor(); }
+                                restore => { root.restore-editor(); }
+                                delete-forever => { root.show-delete-forever = true; }
+                                copy-note => { root.copy-editor(); }
+                                tag-added(text) => { root.tag-added(text); }
+                                tag-removed(text) => { root.tag-removed(text); }
+                                assign-folder(id) => { root.assign-folder(id); }
+                                back => { root.back-to-list(); }
+                            }
+                        if !root.has-note:
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: Theme.bg;
+                                EmptyState {
+                                    width: 100%;
+                                    height: 100%;
+                                    title: "Select a note to view";
+                                    subtitle: "or create a new one with Ctrl+N";
+                                }
+                            }
+                }
+
+                // ============ STATUS BAR ============
+                Rectangle {
+                    height: 26px;
+                    Rectangle { y: 0; width: parent.width; height: 1px; background: Theme.border; }
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        spacing: 8px;
+                        Text {
+                            text: "Local-first · Private by design";
+                            font-size: 10.5px;
+                            color: Theme.text-faint;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: root.note-count + " notes";
+                            font-size: 10.5px;
+                            color: Theme.text-faint;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // ============ OVERLAYS ============
+            // Settings dialog
+            if root.show-settings:
+                Rectangle {
+                    width: 100%; height: 100%;
+                    Rectangle { width: 100%; height: 100%; background: Theme.scrim; TouchArea { clicked => { root.show-settings = false; } } }
+                    settingsCard := Rectangle {
+                        width: min(430px, parent.width - 48px);
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2 - 50px;
+                        height: settingsLayout.preferred-height;
+                        border-radius: Theme.r-lg;
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border-strong;
+                        drop-shadow-blur: 34px;
+                        drop-shadow-color: #00000066;
+                        settingsLayout := VerticalLayout {
+                            padding: 22px;
+                            spacing: 10px;
+                            Text { text: "Settings"; font-size: 17px; font-weight: 600; color: Theme.text; }
+                            Text { text: "Appearance"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; padding-top: 4px; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                // Dark option
+                                darkOpt := Rectangle {
+                                    height: 78px;
+                                    horizontal-stretch: 1;
+                                    border-radius: Theme.r-md;
+                                    background: Theme.dark ? Theme.accent-soft : Theme.surface-2;
+                                    border-width: 1.5px;
+                                    border-color: Theme.dark ? Theme.accent : transparent;
+                                    TouchArea { mouse-cursor: pointer; clicked => { if !Theme.dark { root.toggle-theme(); } } }
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 6px;
+                                        IconMoon { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
+                                        Text { text: "Dark"; font-size: 13px; font-weight: 600; color: Theme.text; }
+                                    }
+                                }
+                                lightOpt := Rectangle {
+                                    height: 78px;
+                                    horizontal-stretch: 1;
+                                    border-radius: Theme.r-md;
+                                    background: !Theme.dark ? Theme.accent-soft : Theme.surface-2;
+                                    border-width: 1.5px;
+                                    border-color: !Theme.dark ? Theme.accent : transparent;
+                                    TouchArea { mouse-cursor: pointer; clicked => { if Theme.dark { root.toggle-theme(); } } }
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 6px;
+                                        IconSun { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
+                                        Text { text: "Light"; font-size: 13px; font-weight: 600; color: Theme.text; }
+                                    }
+                                }
+                            }
+                            Text { text: "About"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; padding-top: 4px; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout { alignment: center; IconGhost { stroke-color: Theme.accent; preferred-width: 30px; preferred-height: 30px; } }
+                                VerticalLayout {
+                                    spacing: 1px;
+                                    Text { text: "Notes · yellod suite"; font-size: 13px; font-weight: 600; color: Theme.text; }
+                                    Text { text: "Version 1.0.0 · local-first, private"; font-size: 11.5px; color: Theme.text-faint; }
+                                }
+                                Rectangle {} // spring
+                                TextButton { label: "Done"; emphasis: true; clicked => { root.show-settings = false; } }
+                            }
+                            AboutSlint {}
+                        }
+                    }
+                }
+
+            // Delete forever confirm
+            if root.show-delete-forever:
+                ConfirmDialog {
+                    title: "Delete forever?";
+                    message: "This note will be permanently deleted. This action cannot be undone.";
+                    confirm-label: "Delete";
+                    danger: true;
+                    confirmed => { root.delete-forever-confirmed(); }
+                    cancelled => { root.show-delete-forever = false; }
+                }
+
+            // Empty trash confirm
+            if root.show-empty-trash:
+                ConfirmDialog {
+                    title: "Empty trash?";
+                    message: "All notes in Trash will be permanently deleted. This action cannot be undone.";
+                    confirm-label: "Empty trash";
+                    danger: true;
+                    confirmed => { root.empty-trash-confirmed(); }
+                    cancelled => { root.show-empty-trash = false; }
+                }
+
+            // Toast
+            if root.toast-visible:
+                Toast {
+                    width: max(220px, self.preferred-width);
+                    x: (app.width - self.width) / 2;
+                    y: app.height - 66px;
+                    message: root.toast-message;
+                }
+        }
+    }
+}

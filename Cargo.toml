@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/notes",
+    "apps/calendar",
+    "crates/ycore",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.78"
+license = "MIT"
+repository = "https://github.com/xyzyt010/notes-calendar"
+
+[workspace.dependencies]
+# Shared
+ycore = { path = "crates/ycore" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+
+# Storage
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid", "backup"] }
+
+# UI
+slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "accessibility", "backend-winit", "renderer-femtovg"] }
+slint-build = "1.18.1"
+
+# Web
+axum = { version = "0.8", features = ["json", "macros", "query", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "services"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3
+strip = "symbols"
+
+[profile.release-debug]
+inherits = "release"
+debug = true
+strip = false

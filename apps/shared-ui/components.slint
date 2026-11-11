@@ -1,0 +1,528 @@
+// Shared custom widgets for the yellod apps. Pure Slint, themeable via Theme.
+
+import { Theme } from "theme.slint";
+import {
+    IconSearch, IconX, IconPin, IconGhost,
+} from "icons.slint";
+
+// ---------- Data ----------
+export struct NoteData {
+    id: string,
+    title: string,
+    preview: string,
+    date-label: string,
+    pinned: bool,
+    favorite: bool,
+    word-count: int,
+}
+
+export struct FolderData {
+    id: string,
+    name: string,
+    meta: string,
+}
+
+export struct TagData {
+    name: string,
+    meta: string,
+}
+
+// ---------- IconButton: circular hover button, holds any children ----------
+export component IconButton inherits Rectangle {
+    in property <length> size: 38px;
+    in-out property <bool> selected: false;
+    in-out property <bool> danger: false;
+    callback clicked();
+
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: root.selected
+        ? Theme.accent-soft
+        : (ta.has-hover ? (root.danger ? Theme.danger-soft : Theme.surface-2) : transparent);
+    animate background { duration: 130ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            @children
+        }
+    }
+}
+
+// ---------- RailButton: left icon rail entry (icon + tiny label) ----------
+export component RailButton inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> selected: false;
+    callback clicked();
+
+    width: Theme.rail-width;
+    height: 60px;
+
+    box := Rectangle {
+        x: 6px;
+        y: 3px;
+        width: parent.width - 12px;
+        height: parent.height - 6px;
+        border-radius: Theme.r-md;
+        background: root.selected
+            ? Theme.accent-soft
+            : (ta.has-hover ? Theme.surface-2 : transparent);
+        animate background { duration: 130ms; easing: ease-out; }
+
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+
+        VerticalLayout {
+            padding: 6px;
+            spacing: 2px;
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                @children
+            }
+            Text {
+                text: root.label;
+                font-size: 10.5px;
+                font-weight: 500;
+                color: root.selected ? Theme.accent : Theme.text-dim;
+                horizontal-alignment: center;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+// ---------- SidebarRow: folder/tag list rows ----------
+export component SidebarRow inherits Rectangle {
+    in property <string> label;
+    in property <string> meta: "";          // right-aligned count
+    in property <bool> show-delete: false;
+    in-out property <bool> selected: false;
+    callback clicked();
+    callback delete();
+
+    height: 40px;
+    border-radius: Theme.r-md;
+    background: root.selected
+        ? Theme.accent-soft
+        : (ta.has-hover ? Theme.surface-2 : transparent);
+    animate background { duration: 120ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 10px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            @children
+        }
+
+        Text {
+            text: root.label;
+            font-size: 13.5px;
+            font-weight: root.selected ? 600 : 400;
+            color: root.selected ? Theme.accent : Theme.text;
+            vertical-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+
+        Rectangle {} // spring
+
+        Text {
+            visible: root.meta != "" && !(root.show-delete && ta.has-hover);
+            text: root.meta;
+            font-size: 11.5px;
+            color: Theme.text-faint;
+            vertical-alignment: center;
+        }
+
+        if root.show-delete && ta.has-hover:
+            IconButton {
+                size: 24px;
+                clicked => { root.delete(); }
+                IconX { stroke-color: Theme.text-faint; preferred-width: 13px; preferred-height: 13px; }
+            }
+    }
+}
+
+// ---------- SearchBar ----------
+export component SearchBar inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder: "Search your notes";
+    callback submitted();
+    callback cleared();
+
+    public function input-focus() {
+        input.focus();
+    }
+
+    height: 44px;
+    border-radius: Theme.r-xl;
+    background: Theme.surface-2;
+    border-width: 1.5px;
+    border-color: input.has-focus ? Theme.accent : transparent;
+    animate border-color { duration: 150ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 15px;
+        padding-right: 6px;
+        spacing: 8px;
+
+        Rectangle {
+            width: 22px;
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    IconSearch { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
+                }
+            }
+        }
+
+        input := TextInput {
+            horizontal-stretch: 1;
+            font-size: 14.5px;
+            font-weight: 400;
+            color: Theme.text;
+            vertical-alignment: center;
+            selection-background-color: Theme.accent-soft;
+            selection-foreground-color: Theme.text;
+            single-line: true;
+            key-pressed(event) => {
+                if event.text == "\n" {
+                    root.submitted();
+                    return accept;
+                }
+                reject
+            }
+        }
+
+        Rectangle {
+            width: 34px;
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    IconButton {
+                        visible: root.text != "";
+                        size: 32px;
+                        clicked => { root.text = ""; root.cleared(); }
+                        IconX { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; }
+                    }
+                }
+            }
+        }
+    }
+
+    // Placeholder
+    Text {
+        visible: root.text == "";
+        x: 44px;
+        width: parent.width - 60px;
+        height: 100%;
+        vertical-alignment: center;
+        text: root.placeholder;
+        font-size: 14.5px;
+        color: Theme.text-faint;
+        wrap: no-wrap;
+        overflow: elide;
+    }
+}
+
+// ---------- Input (styled single-line) ----------
+export component Input inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in-out property <bool> edited: false;
+    in property <string> placeholder: "";
+    in property <string> font-family: "";
+    callback submitted();
+
+    height: 34px;
+    background: transparent;
+
+    input := TextInput {
+        width: 100%;
+        height: 100%;
+        font-size: 15px;
+        font-family: root.font-family == "" ? "Inter" : root.font-family;
+        color: Theme.text;
+        vertical-alignment: center;
+        selection-background-color: Theme.accent-soft;
+        selection-foreground-color: Theme.text;
+        single-line: true;
+        edited => { root.edited = true; }
+        key-pressed(event) => {
+            if event.text == "\n" { root.submitted(); return accept; }
+            reject
+        }
+    }
+
+    Text {
+        visible: input.text == "";
+        text: root.placeholder;
+        font-size: 15px;
+        color: Theme.text-faint;
+        vertical-alignment: center;
+        wrap: no-wrap;
+    }
+}
+
+// ---------- NoteCard ----------
+export component NoteCard inherits Rectangle {
+    in property <NoteData> note;
+    in property <bool> compact: false;
+    in-out property <bool> selected: false;
+    callback clicked();
+    callback pin-toggled();
+    callback favorite-toggled();
+
+    height: root.compact ? 118px : 190px;
+    border-radius: Theme.r-lg;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border);
+    animate background { duration: 130ms; }
+    animate border-color { duration: 130ms; }
+    drop-shadow-blur: 18px;
+    drop-shadow-offset-y: 3px;
+    drop-shadow-color: #00000038;
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 14px;
+        padding-bottom: 12px;
+        spacing: 8px;
+
+        // Title row with pin
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.note.title == "" ? "Untitled" : root.note.title;
+                font-size: 15px;
+                font-weight: 600;
+                color: root.note.title == "" ? Theme.text-faint : Theme.text;
+                font-italic: root.note.title == "";
+                wrap: no-wrap;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.note.preview;
+            font-size: 13px;
+            font-weight: 400;
+            color: Theme.text-dim;
+            wrap: word-wrap;
+            overflow: elide;
+            max-height: root.height - 84px;
+            vertical-alignment: top;
+        }
+
+        Rectangle {} // spring
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: root.note.date-label;
+                font-size: 11px;
+                color: Theme.text-faint;
+                vertical-alignment: center;
+            }
+
+            Rectangle {} // spring
+
+            // Pin button — visible on hover or when pinned
+            IconButton {
+                visible: ta.has-hover || root.note.pinned;
+                size: 30px;
+                clicked => { root.pin-toggled(); }
+                IconPin {
+                    stroke-color: root.note.pinned ? Theme.accent : Theme.text-dim;
+                    preferred-width: 16px;
+                    preferred-height: 16px;
+                }
+            }
+        }
+    }
+}
+
+// ---------- TextButton ----------
+export component TextButton inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> emphasis: false;
+    in-out property <bool> danger: false;
+    callback clicked();
+
+    height: 38px;
+    min-width: 76px;
+    horizontal-stretch: 0;
+    border-radius: Theme.r-md;
+    background: root.danger
+        ? (ta.has-hover ? Theme.danger-soft : Theme.danger-soft)
+        : (root.emphasis
+            ? (ta.has-hover ? Theme.accent : Theme.accent)
+            : (ta.has-hover ? Theme.surface-3 : Theme.surface-2));
+    border-width: 0px;
+    animate background { duration: 120ms; }
+
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+
+    VerticalLayout {
+        alignment: center;
+        padding-left: 16px;
+        padding-right: 16px;
+        Text {
+            text: root.label;
+            font-size: 13.5px;
+            font-weight: 600;
+            color: root.danger ? Theme.danger : (root.emphasis ? Theme.on-accent : Theme.text);
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// ---------- ConfirmDialog ----------
+export component ConfirmDialog inherits Rectangle {
+    in property <string> title;
+    in property <string> message;
+    in property <string> confirm-label: "Delete";
+    in property <bool> danger: true;
+    callback confirmed();
+    callback cancelled();
+
+    width: 100%;
+    height: 100%;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.scrim;
+        TouchArea { clicked => { root.cancelled(); } }
+    }
+
+    card := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2 - 60px;
+        width: min(400px, parent.width - 48px);
+        height: layout.preferred-height;
+        border-radius: Theme.r-lg;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 32px;
+        drop-shadow-color: #00000060;
+
+        layout := VerticalLayout {
+            padding: 22px;
+            spacing: 10px;
+
+            Text {
+                text: root.title;
+                font-size: 16.5px;
+                font-weight: 600;
+                color: Theme.text;
+            }
+            Text {
+                text: root.message;
+                font-size: 13.5px;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+            Rectangle { height: 4px; }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+                TextButton { label: "Cancel"; clicked => { root.cancelled(); } }
+                TextButton { label: root.confirm-label; danger: root.danger; emphasis: !root.danger; clicked => { root.confirmed(); } }
+            }
+        }
+    }
+}
+
+// ---------- Toast ----------
+export component Toast inherits Rectangle {
+    in property <string> message;
+
+    height: 42px;
+    border-radius: Theme.r-xl;
+    background: #2a2b2d;
+    border-width: 1px;
+    border-color: #ffffff1f;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: #00000050;
+
+    VerticalLayout {
+        alignment: center;
+        padding-left: 18px;
+        padding-right: 18px;
+        Text {
+            text: root.message;
+            font-size: 13px;
+            color: #f1f3f4;
+        }
+    }
+}
+
+// ---------- EmptyState ----------
+export component EmptyState inherits VerticalLayout {
+    in property <string> title;
+    in property <string> subtitle: "";
+    alignment: center;
+    spacing: 4px;
+
+    HorizontalLayout {
+        alignment: center;
+        IconGhost {
+            preferred-width: 64px;
+            preferred-height: 64px;
+            stroke-color: Theme.text-faint;
+        }
+    }
+    Text {
+        text: root.title;
+        font-size: 16px;
+        font-weight: 600;
+        color: Theme.text-dim;
+        horizontal-alignment: center;
+    }
+    Text {
+        visible: root.subtitle != "";
+        text: root.subtitle;
+        font-size: 13px;
+        color: Theme.text-faint;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
+// ---------- Divider ----------
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}

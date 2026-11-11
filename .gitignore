@@ -1,0 +1,47 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+*.pdb
+
+# Node / web
+node_modules
+dist
+.vite
+
+# Build outputs
+*.apk
+*.aab
+*.msi
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.tar.zst
+*.zip
+*.7z
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Secrets / keys (never commit)
+*.key
+*.pem
+*.p12
+*.jks
+.env
+.env.*
+!.env.example
+
+# OS
+Thumbs.db
+.DS_Store
+__MACOSX/
+
+# Temp probes
+probe*.ps1
+probe*.sh
+*.log

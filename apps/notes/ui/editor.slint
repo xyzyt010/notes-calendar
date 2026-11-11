@@ -1,0 +1,369 @@
+// Editor pane for yellod Notes. Single component, fully property-driven.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconChevronLeft, IconPin, IconStar, IconArchive, IconArchiveArrowUp, IconTrash,
+    IconUndo2, IconCopy, IconFolder, IconX, IconCircleCheck,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, FolderData,
+} from "../../shared-ui/components.slint";
+
+export component EditorPane inherits Rectangle {
+    preferred-width: 760px;
+
+    // ---- in-out state ----
+    in-out property <string> editor-title;
+    in-out property <string> editor-body;
+    in-out property <[string]> editor-tags: [];
+    in-out property <bool> editor-pinned: false;
+    in-out property <bool> editor-favorite: false;
+    in-out property <int> word-count: 0;
+    in-out property <int> save-state: 0;          // 0 idle · 1 saving · 2 saved
+    in-out property <string> edited-label: "";
+    in-out property <bool> folder-menu-open: false;
+
+    // ---- in state ----
+    in property <bool> compact: false;
+    in property <bool> in-trash: false;
+    in property <bool> in-archive: false;
+    in property <[FolderData]> folders: [];
+    in property <string> current-folder: "";
+
+    // ---- actions ----
+    callback content-changed();
+    callback toggle-pin();
+    callback toggle-favorite();
+    callback toggle-archive();
+    callback toggle-trash();
+    callback restore();
+    callback delete-forever();
+    callback copy-note();
+    callback tag-added(string);
+    callback tag-removed(string);
+    callback assign-folder(string);
+    callback back();
+
+    background: Theme.bg;
+
+    VerticalLayout {
+        // ===== Header icon row =====
+        HorizontalLayout {
+            height: 56px;
+            padding-left: 8px;
+            padding-right: 14px;
+            spacing: 2px;
+
+            if root.compact:
+                IconButton { size: 38px; clicked => { root.back(); } IconChevronLeft { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; } }
+
+            // Folder assign
+            folderbtn := IconButton {
+                size: 38px;
+                clicked => { root.folder-menu-open = !root.folder-menu-open; }
+                IconFolder { stroke-color: root.current-folder == "" ? Theme.text-dim : Theme.accent; preferred-width: 20px; preferred-height: 20px; }
+            }
+
+            Rectangle {} // spring
+
+            if !root.in-trash:
+                IconButton { selected: root.editor-pinned; size: 38px; clicked => { root.toggle-pin(); }
+                    IconPin { stroke-color: root.editor-pinned ? Theme.accent : Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { selected: root.editor-favorite; size: 38px; clicked => { root.toggle-favorite(); }
+                    IconStar { stroke-color: root.editor-favorite ? Theme.accent : Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { size: 38px; clicked => { root.toggle-archive(); }
+                    if root.in-archive:
+                        IconArchiveArrowUp { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; }
+                    if !root.in-archive:
+                        IconArchive { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { size: 38px; clicked => { root.copy-note(); }
+                    IconCopy { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { size: 38px; clicked => { root.toggle-trash(); }
+                    IconTrash { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+
+            if root.in-trash:
+                IconButton { size: 38px; clicked => { root.restore(); }
+                    IconUndo2 { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                IconButton { size: 38px; danger: true; clicked => { root.delete-forever(); }
+                    IconTrash { stroke-color: Theme.danger; preferred-width: 19px; preferred-height: 19px; } }
+        }
+
+        // ===== Title =====
+        titleArea := Rectangle {
+            height: 54px;
+            titleInput := TextInput {
+                x: 20px;
+                width: parent.width - 40px;
+                height: 100%;
+                single-line: true;
+                font-size: 26px;
+                font-weight: 600;
+                letter-spacing: -0.3px;
+                color: Theme.text;
+                vertical-alignment: center;
+                selection-background-color: Theme.accent-soft;
+                selection-foreground-color: Theme.text;
+                text <=> root.editor-title;
+                edited => { root.content-changed(); }
+            }
+            if root.editor-title == "":
+                Text {
+                    x: 20px;
+                    width: parent.width - 40px;
+                    height: 100%;
+                    vertical-alignment: center;
+                    text: "Title";
+                    font-size: 26px;
+                    font-weight: 600;
+                    color: Theme.text-faint;
+                    wrap: no-wrap;
+                }
+        }
+
+        // ===== Tags row =====
+        Rectangle {
+            height: 34px;
+            HorizontalLayout {
+                x: 20px;
+                width: parent.width - 40px;
+                height: 100%;
+                spacing: 6px;
+
+                for tag[i] in root.editor-tags:
+                    Rectangle {
+                        height: 24px;
+                        y: 5px;
+                        border-radius: 8px;
+                        background: Theme.accent-soft;
+                        width: chipText.preferred-width + 32px;
+                        HorizontalLayout {
+                            x: 0;
+                            y: 0;
+                            width: 100%;
+                            height: 100%;
+                            padding-left: 9px;
+                            padding-right: 2px;
+                            spacing: 2px;
+                            chipText := Text {
+                                text: "#" + tag;
+                                font-size: 11.5px;
+                                font-weight: 600;
+                                color: Theme.accent;
+                                vertical-alignment: center;
+                            }
+                            xbtn := Rectangle {
+                                width: 17px;
+                                height: 17px;
+                                y: 3px;
+                                border-radius: 8px;
+                                background: removeTouch.has-hover ? Theme.accent-soft : transparent;
+                                removeTouch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.tag-removed(tag); }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        IconX { stroke-color: Theme.accent; preferred-width: 11px; preferred-height: 11px; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                tagArea := Rectangle {
+                    height: 24px;
+                    y: 5px;
+                    width: 110px;
+                    tagInput := TextInput {
+                        width: 100%;
+                        height: 100%;
+                        single-line: true;
+                        font-size: 11.5px;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        selection-background-color: Theme.accent-soft;
+                        key-pressed(event) => {
+                            if event.text == "\n" || event.text == " " || event.text == "," {
+                                root.tag-added(self.text);
+                                self.text = "";
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                    if tagInput.text == "":
+                        Text {
+                            x: 2px;
+                            height: 100%;
+                            vertical-alignment: center;
+                            text: "+ Add tag";
+                            font-size: 11.5px;
+                            font-weight: 500;
+                            color: Theme.text-faint;
+                        }
+                }
+            }
+        }
+
+        // ===== Body =====
+        Rectangle {
+            vertical-stretch: 1;
+            Rectangle { height: 1px; width: parent.width; y: 0; background: Theme.border; }
+
+            bodyScroll := Flickable {
+                width: parent.width;
+                height: parent.height;
+                content-width: self.width;
+                content-height: bodyInput.preferred-height + 140px;
+
+                bodyInput := TextInput {
+                    x: 20px;
+                    y: 12px;
+                    width: parent.width - 40px;
+                    single-line: false;
+                    wrap: word-wrap;
+                    font-size: 15px;
+                    color: Theme.text;
+                    selection-background-color: Theme.accent-soft;
+                    selection-foreground-color: Theme.text;
+                    text <=> root.editor-body;
+                    edited => { root.content-changed(); }
+                }
+
+                TouchArea {
+                    // tap below text to focus body
+                    x: 0;
+                    y: bodyInput.preferred-height;
+                    width: parent.width;
+                    height: 200px;
+                    clicked => { bodyInput.focus(); }
+                }
+            }
+
+            if root.editor-body == "":
+                Text {
+                    x: 20px;
+                    y: 12px;
+                    width: parent.width - 40px;
+                    text: "Start typing…  Markdown is supported.";
+                    font-size: 15px;
+                    color: Theme.text-faint;
+                }
+        }
+
+        // ===== Footer =====
+        Rectangle {
+            height: 34px;
+            Rectangle { height: 1px; width: parent.width; y: 0; background: Theme.border; }
+            HorizontalLayout {
+                x: 20px;
+                y: 0;
+                width: parent.width - 40px;
+                height: 100%;
+                spacing: 8px;
+                Text {
+                    text: root.word-count + " words";
+                    font-size: 11.5px;
+                    color: Theme.text-faint;
+                    vertical-alignment: center;
+                }
+                Rectangle {} // spring
+                if root.save-state == 1:
+                    Text {
+                        text: "Saving…";
+                        font-size: 11.5px;
+                        color: Theme.text-faint;
+                        vertical-alignment: center;
+                    }
+                if root.save-state == 2:
+                    HorizontalLayout {
+                        spacing: 4px;
+                        VerticalLayout {
+                            alignment: center;
+                            IconCircleCheck { stroke-color: Theme.success; preferred-width: 13px; preferred-height: 13px; }
+                        }
+                        Text {
+                            text: "Saved";
+                            font-size: 11.5px;
+                            font-weight: 600;
+                            color: Theme.success;
+                            vertical-alignment: center;
+                        }
+                    }
+                if root.save-state != 1 && root.edited-label != "":
+                    Text {
+                        text: "·  " + root.edited-label;
+                        font-size: 11.5px;
+                        color: Theme.text-faint;
+                        vertical-alignment: center;
+                    }
+            }
+        }
+    }
+
+    // ===== Folder dropdown (absolute overlay) =====
+    if root.folder-menu-open:
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            TouchArea { clicked => { root.folder-menu-open = false; } }
+
+            Rectangle {
+                x: root.compact ? 8px : 56px;
+                y: 58px;
+                width: 240px;
+                height: menuLayout.preferred-height;
+                border-radius: Theme.r-md;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-blur: 24px;
+                drop-shadow-color: #00000055;
+
+                menuLayout := VerticalLayout {
+                    padding: 8px;
+                    spacing: 2px;
+                    Text {
+                        text: "MOVE TO FOLDER";
+                        font-size: 10.5px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                        color: Theme.text-faint;
+                        padding-left: 8px;
+                        padding-top: 2px;
+                        padding-bottom: 2px;
+                    }
+                    noFolderRow := TouchArea {
+                        height: 36px;
+                        clicked => { root.assign-folder(""); }
+                        Rectangle { border-radius: Theme.r-sm; background: noFolderRow.has-hover ? Theme.surface-2 : transparent; }
+                        HorizontalLayout {
+                            x: 8px;
+                            y: 0;
+                            width: 100%;
+                            height: 100%;
+                            Text { text: "No folder"; font-size: 13px; color: Theme.text; vertical-alignment: center; }
+                        }
+                    }
+                    for folder[f] in root.folders:
+                        folderRow := TouchArea {
+                            height: 36px;
+                            clicked => { root.assign-folder(folder.id); }
+                            Rectangle { border-radius: Theme.r-sm; background: folderRow.has-hover ? Theme.surface-2 : transparent; }
+                            HorizontalLayout {
+                                x: 8px;
+                                y: 0;
+                                width: 100%;
+                                height: 100%;
+                                spacing: 8px;
+                                VerticalLayout { alignment: center; IconFolder { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                                Text { text: folder.name; font-size: 13px; color: Theme.text; vertical-alignment: center; overflow: elide; wrap: no-wrap; }
+                            }
+                        }
+                }
+            }
+        }
+}

@@ -1,0 +1,57 @@
+// Shared design tokens for the yellod apps (Notes & Calendar).
+// Import this file, then reference Theme.* anywhere.
+
+import "../../assets/fonts/Inter-Regular.ttf";
+import "../../assets/fonts/Inter-Medium.ttf";
+import "../../assets/fonts/Inter-SemiBold.ttf";
+import "../../assets/fonts/Inter-Bold.ttf";
+import "../../assets/fonts/Inter-Light.ttf";
+import "../../assets/fonts/Inter-Italic.ttf";
+import "../../assets/fonts/Inter-SemiBoldItalic.ttf";
+import "../../assets/fonts/Inter-MediumItalic.ttf";
+
+export global Theme {
+    // Master switch. Toggled from settings; everything derives from it.
+    in-out property <bool> dark: true;
+
+    // ---- Backgrounds ----
+    out property <color> bg:            dark ? #131314 : #f7f8f9;
+    out property <color> surface:       dark ? #1b1c1d : #ffffff;
+    out property <color> surface-2:     dark ? #232425 : #eceef0;  // pill / chip / hover base
+    out property <color> surface-3:     dark ? #2b2c2e : #e1e3e6;  // stronger hover / pressed
+    out property <color> border:        dark ? #2b2c2e : #e3e4e6;
+    out property <color> border-strong: dark ? #3c3d40 : #cbced2;
+
+    out property <color> scrim:         #00000099;                  // modal overlay
+
+    // ---- Text ----
+    out property <color> text:          dark ? #e8eaed : #1f2022;
+    out property <color> text-dim:      dark ? #9aa0a6 : #5f6368;
+    out property <color> text-faint:    dark ? #6f747b : #a3a7ad;
+
+    // ---- Accent (Google dark-style blue) ----
+    out property <color> accent:        dark ? #aecbfa : #0b57d0;
+    out property <color> on-accent:     dark ? #0b326e : #ffffff;
+    out property <color> accent-soft:   dark ? #aecbfa29 : #0b57d01f; // ~16% / ~12%
+
+    out property <color> danger:        dark ? #f2b8b5 : #b3261e;
+    out property <color> danger-soft:   dark ? #f2b8b520 : #b3261a12;
+
+    out property <color> success:       dark ? #9ad3a8 : #146c2e;
+
+    // ---- Radius scale ----
+    out property <length> r-sm: 8px;
+    out property <length> r-md: 12px;
+    out property <length> r-lg: 16px;
+    out property <length> r-xl: 24px;
+
+    // ---- Layout ----
+    out property <length> rail-width: 72px;
+    out property <length> sidebar-width: 264px;
+    out property <length> topbar-height: 64px;
+
+    // ---- Elevation (fake, layered translucency — cheap & looks right) ----
+    out property <brush> card-shadow: dark
+        ? @linear-gradient(180deg, #ffffff08 0%, #00000055 100%)
+        : @linear-gradient(180deg, #00000000 0%, #00000014 100%);
+}
