@@ -1,0 +1,201 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+
+jobs:
+  create-release:
+    name: Create release draft
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches Cargo.toml version
+        run: |
+          VER=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "([^"]+)".*/\1/')
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$VER" != "$TAG" ]; then
+            echo "Cargo.toml version ($VER) does not match tag ($TAG)"
+            exit 1
+          fi
+      - name: Create release draft
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+
+  build:
+    name: ${{ matrix.display }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- Linux (widest glibc baseline) ---
+          - display: linux-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            arch: amd64
+            bin_ext: ""
+          - display: linux-aarch64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            arch: arm64
+            bin_ext: ""
+          # --- Linux musl (static, max compatibility) ---
+          - display: linux-x86_64-musl
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            arch: amd64
+            use_cross: true
+            bin_ext: ""
+          - display: linux-aarch64-musl
+            os: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
+            arch: arm64
+            use_cross: true
+            bin_ext: ""
+          # --- Windows ---
+          - display: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: amd64
+            bin_ext: .exe
+          - display: windows-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+            bin_ext: .exe
+          # --- macOS (universal2 via lipo) ---
+          - display: macos-aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            arch: arm64
+            bin_ext: ""
+            mac_arch: arm64
+          - display: macos-x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            arch: amd64
+            bin_ext: ""
+            mac_arch: x86_64
+          # --- Android arm64 APK ---
+          - display: android-aarch64
+            os: ubuntu-24.04
+            target: aarch64-linux-android
+            arch: arm64
+            bin_ext: ""
+            use_android: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux' && !matrix.use_android
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libudev-dev libinput-dev libgbm-dev libfontconfig-dev libseat-dev libwayland-dev libgl1-mesa-dev libglx-dev
+
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross@0.2.5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - name: Install cargo-apk2
+        if: matrix.use_android
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-apk2@1.5.0
+
+      - name: Build (desktop)
+        if: ${{ !matrix.use_android }}
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            BUILD=cross
+          else
+            BUILD=cargo
+          fi
+          $BUILD build --release --locked --target ${{ matrix.target }} --workspace
+          mkdir -p dist
+          for app in notes calendar; do
+            bin="target/${{ matrix.target }}/release/${app}${{ matrix.bin_ext }}"
+            echo "built: $bin"
+            cp "$bin" "dist/${app}-${{ github.ref_name }}-${{ matrix.display }}${{ matrix.bin_ext }}"
+          done
+
+      # macOS universal2 combine step runs here for the darwin target
+      - name: Build Android APK (Notes + Calendar)
+        if: matrix.use_android
+        shell: bash
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          RUSTFLAGS: "-C link-arg=-Wl,-z,defs"
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+        run: |
+          set -e
+          mkdir -p dist
+          cargo apk2 build --release --locked --target ${{ matrix.target }} -p notes --lib
+          cargo apk2 build --release --locked --target ${{ matrix.target }} -p calendar --lib
+          cp target/${{ matrix.target }}/release/*.apk dist/ 2>/dev/null || true
+          ls dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.display }}
+          path: dist/
+
+  publish:
+    name: Publish release
+    needs: [create-release, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Collect checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS || true
+          cat SHA256SUMS
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/*
+      - name: Upload release files
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: false

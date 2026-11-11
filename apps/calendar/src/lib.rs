@@ -933,6 +933,12 @@ fn current_days(state: &Rc<RefCell<AppState>>) -> Vec<NaiveDate> {
 // ---------- entry point ----------
 
 pub fn run() -> anyhow::Result<()> {
+    #[cfg(target_os = "android")]
+    compile_error!("Android builds must call android_main instead of run()");
+    run_ui()
+}
+
+pub fn run_ui() -> anyhow::Result<()> {
     let ui = MainWindow::new()?;
 
     let dir = data_dir();
@@ -1372,3 +1378,15 @@ pub fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
+
+// ---------- Android entry point ----------
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub fn android_main(app: slint::android::AndroidApp) {
+    // Initialize the Slint Android backend before creating any UI.
+    slint::android::init(app).unwrap();
+    // Android apps use the same UI entry point.
+    if let Err(e) = run_ui() {
+        eprintln!("[calendar] run_ui failed: {e:?}");
+    }
+}

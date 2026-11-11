@@ -27,7 +27,7 @@ chrono = { version = "0.4", features = ["serde", "clock"] }
 rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid", "backup"] }
 
 # UI
-slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "accessibility", "backend-winit", "renderer-femtovg"] }
+slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "accessibility", "backend-winit", "backend-android-activity-06", "renderer-femtovg"] }
 slint-build = "1.18.1"
 
 # Web

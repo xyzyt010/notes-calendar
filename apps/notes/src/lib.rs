@@ -255,6 +255,12 @@ fn deselect_after_leaving_view(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
 // ---------- entry point ----------
 
 pub fn run() -> anyhow::Result<()> {
+    #[cfg(target_os = "android")]
+    compile_error!("Android builds must call android_main instead of run()");
+    run_ui()
+}
+
+pub fn run_ui() -> anyhow::Result<()> {
     let ui = MainWindow::new()?;
     let dir = data_dir();
     std::fs::create_dir_all(&dir)?;
@@ -810,4 +816,14 @@ pub fn run() -> anyhow::Result<()> {
 
     ui.run()?;
     Ok(())
+}
+
+// ---------- Android entry point ----------
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub fn android_main(app: slint::android::AndroidApp) {
+    slint::android::init(app).unwrap();
+    if let Err(e) = run_ui() {
+        eprintln!("[notes] run_ui failed: {e:?}");
+    }
 }

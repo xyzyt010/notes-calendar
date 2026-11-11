@@ -29,7 +29,7 @@ default = []
 skia = ["slint/renderer-skia"]
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["lib", "cdylib"]
 path = "src/lib.rs"
 
 [[bin]]
