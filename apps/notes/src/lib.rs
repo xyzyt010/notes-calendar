@@ -215,11 +215,8 @@ fn select_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid) {
             drop(s);
             state.borrow_mut().current_id = Some(id);
             apply_to_editor(state, ui, &note);
-            eprintln!("[notes] select_note ok: has_note={}", ui.get_has_note());
         }
-        other => {
-            eprintln!("[notes] select_note failed: {:?}", other.map(|o| o.is_some()));
-        }
+        _ => {}
     }
 }
 
@@ -300,19 +297,14 @@ pub fn run() -> anyhow::Result<()> {
     let state = Rc::new(RefCell::new(state));
 
     // Initial refresh + preselect latest note (desktop)
-    eprintln!("[notes] startup: data_dir={:?}", state.borrow().data_dir);
     refresh_list(&state, &ui);
     {
         let s = state.borrow();
-        let first = notes_store::list_notes(&s.db, &notes_store::ListFilter::default());
-        eprintln!("[notes] preselect query: {:?}", first.as_ref().map(|v| v.len()));
-        if let Ok(first) = first {
+        let first = notes_store::list_notes(&s.db, &notes_store::ListFilter::default());        if let Ok(first) = first {
             if let Some(first) = first.first() {
                 let id = first.id;
                 drop(s);
-                eprintln!("[notes] preselect note {id}");
                 select_note(&state, &ui, id);
-                eprintln!("[notes] after select: has_note={} current={:?}", ui.get_has_note(), state.borrow().current_id);
             }
         }
     }
@@ -808,27 +800,13 @@ pub fn run() -> anyhow::Result<()> {
     {
         let ui2 = ui.clone_strong();
         slint::Timer::single_shot(Duration::from_millis(150), move || {
-            // Give the window a comfortable default size once realized.
-            ui2.window().set_size(slint::LogicalSize::new(1280.0, 800.0));
+            // Give the window a size that actually fits this screen (handles high-DPI
+            // screens where slint's logical units map to fewer physical pixels).
+            ui2.window().set_size(slint::LogicalSize::new(880.0, 600.0));
             let sz = ui2.window().size();
-            eprintln!("[notes] post-show size={:?}", sz);
-        });
+                });
     }
 
-    {
-        let ui2 = ui.clone_strong();
-        slint::Timer::single_shot(Duration::from_millis(60), move || {
-            let sz = ui2.window().size();
-            let scale = ui2.window().scale_factor();
-            let w = sz.width as f32 / scale;
-            eprintln!("[notes] initial layout: size={:?} scale={} compact-check-width={}", sz, scale, w);
-            if w > 0.0 {
-                ui2.set_compact(w < 880.0);
-                let cols = if w < 1250.0 { 2 } else if w < 1650.0 { 3 } else { 4 };
-                ui2.set_grid_cols(cols);
-            }
-        });
-    }
 
     ui.run()?;
     Ok(())

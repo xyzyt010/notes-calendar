@@ -165,6 +165,17 @@ pub fn get_event(conn: &Connection, id: Uuid) -> rusqlite::Result<Option<Event>>
     .optional()
 }
 
+pub fn list_events(conn: &Connection) -> rusqlite::Result<Vec<Event>> {
+    let mut stmt = conn.prepare(&format!("SELECT {EVENT_COLS} FROM events ORDER BY start ASC"))?;
+    let rows = stmt.query_map([], event_from_row)?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn set_calendar_visible(conn: &Connection, id: Uuid, visible: bool) -> rusqlite::Result<()> {
+    conn.execute("UPDATE calendars SET visible=? WHERE id=?", params![visible as i64, s(id)])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,415 @@
+// Calendar scope views: timeline (day/week), month grid, year overview.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    HourEventRect, WeekDay, TimelineColumn, MonthCell, MonthChip, YearMonth,
+} from "models.slint";
+
+// ============ TimelineView (Day & Week) ============
+export component TimelineView inherits Rectangle {
+    in property <[TimelineColumn]> columns: [];
+    in property <[MonthChip]> all-day: [];
+    in property <bool> week-mode: false;
+    in property <int> now-min: 0;
+
+    callback event-clicked(string, int);   // id, column index
+    callback slot-clicked(int, int);       // column index, minutes
+
+    property <[int]> hour-list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+    property <[int]> label-hours: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+    property <length> gutter: 56px;
+    property <length> hour-height: 52px;
+    property <length> ppm: root.hour-height / 60;
+
+    background: Theme.bg;
+
+    VerticalLayout {
+        // ===== All-day strip =====
+        Rectangle {
+            visible: root.all-day.length > 0;
+            height: 42px;
+            background: Theme.surface;
+            Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+            HorizontalLayout {
+                padding-left: root.gutter + 12px;
+                padding-top: 5px;
+                padding-bottom: 5px;
+                spacing: 6px;
+
+                Text { text: "ALL DAY"; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; padding-right: 4px; }
+                for chipItem in root.all-day:
+                    chipTouch := TouchArea {
+                        width: chipText.preferred-width + 34px;
+                        height: 26px;
+                        clicked => { root.event-clicked(chipItem.id, 0); }
+                        Rectangle {
+                            border-radius: 8px;
+                            background: Theme.surface-2;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            HorizontalLayout {
+                                x: 8px; y: 0; width: 100%; height: 100%;
+                                spacing: 6px;
+                                Rectangle { width: 8px; height: 8px; border-radius: 4px; background: chipItem.color; y: 8px; }
+                                chipText := Text { text: chipItem.title; font-size: 12px; font-weight: 600; color: Theme.text; vertical-alignment: center; overflow: elide; wrap: no-wrap; }
+                            }
+                        }
+                    }
+            }
+        }
+
+        // ===== Timeline =====
+        scroll := Flickable {
+            content-width: self.width;
+            content-height: 24 * root.hour-height + 12px;
+
+            VerticalLayout {
+                // Week day headers
+                if root.week-mode:
+                    Rectangle {
+                        height: 46px;
+                        background: Theme.bg;
+                        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+                        HorizontalLayout {
+                            spacing: 0px;
+                            Rectangle { width: root.gutter; }
+                            for column in root.columns:
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 1px;
+                                    Text { text: column.day.label; font-size: 10.5px; font-weight: 700; letter-spacing: 0.8px; color: column.day.today ? Theme.accent : Theme.text-faint; horizontal-alignment: center; }
+                                    Text { text: column.day.day-num; font-size: 15px; font-weight: 600; color: column.day.today ? Theme.accent : Theme.text; horizontal-alignment: center; }
+                                }
+                        }
+                    }
+
+                // Body: gutter + day columns
+                HorizontalLayout {
+                    spacing: 0px;
+
+                    // Hour labels gutter
+                    Rectangle {
+                        width: root.gutter;
+                        height: 24 * root.hour-height;
+                        for h in root.label-hours:
+                                Text {
+                                    x: root.gutter - 46px;
+                                    y: h * root.hour-height - 7px;
+                                    width: 42px;
+                                    height: 14px;
+                                    text: (Math.mod(h, 12) == 0 ? "12" : (h > 12 ? h - 12 : h)) + (h < 12 ? " AM" : " PM");
+                                    font-size: 10px;
+                                    color: Theme.text-faint;
+                                    horizontal-alignment: right;
+                                }
+                    }
+
+                    // Day columns
+                    for column[i] in root.columns:
+                        columnRect := Rectangle {
+                            horizontal-stretch: 1;
+                            height: 24 * root.hour-height;
+                            clip: true;
+
+                            // today tint
+                            Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                background: column.day.today ? Theme.accent-soft : transparent;
+                                opacity: 0.35;
+                            }
+
+                            // Hour gridlines
+                            for h in root.hour-list:
+                                Rectangle {
+                                    y: h * root.hour-height;
+                                    width: 100%;
+                                    height: 1px;
+                                    background: Theme.border;
+                                    opacity: h == 0 ? 1.0 : 0.55;
+                                }
+
+                            // Half-hour dotted lines
+                            for h in root.hour-list:
+                                Rectangle {
+                                    y: h * root.hour-height + root.hour-height / 2;
+                                    width: 100%;
+                                    height: 1px;
+                                    background: Theme.border;
+                                    opacity: 0.18;
+                                }
+
+                            // Empty-slot click target
+                            slotTouch := TouchArea {
+                                width: 100%;
+                                height: 100%;
+                                clicked => { root.slot-clicked(i, Math.floor(self.mouse-y / root.ppm / 30) * 30); }
+                            }
+
+                            // Left separator
+                            Rectangle { x: 0; width: 1px; height: 100%; background: Theme.border; }
+
+                            // Event blocks
+                            for block in column.blocks:
+                                blockTouch := TouchArea {
+                                    x: (block.col / block.cols) * (columnRect.width - 4px);
+                                    width: (columnRect.width - 4px) / block.cols - 2px;
+                                    y: block.top-min * root.ppm;
+                                    height: Math.max(20px, block.height-min * root.ppm);
+                                    clicked => { root.event-clicked(block.id, i); }
+
+                                    Rectangle {
+                                        border-radius: 7px;
+                                        background: block.color;
+                                        opacity: blockTouch.has-hover ? 1.0 : 0.92;
+                                        clip: true;
+                                        Rectangle {
+                                            x: 0; y: 0; width: 3px; height: 100%;
+                                            background: #00000033;
+                                        }
+                                        VerticalLayout {
+                                            x: 8px; y: 2px;
+                                            width: parent.width - 12px;
+                                            height: parent.height;
+                                            spacing: 0px;
+                                            Text {
+                                                text: block.title;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                color: #101418;
+                                                wrap: no-wrap;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                visible: block.height-min >= 44.0;
+                                                text: block.time-label;
+                                                font-size: 10.5px;
+                                                color: #101418cc;
+                                            }
+                                        }
+                                    }
+                                }
+
+                            // Now line (today's column)
+                            if column.day.today:
+                                Rectangle {
+                                    y: root.now-min * root.ppm;
+                                    width: 100%;
+                                    height: 2px;
+                                    background: #ea4335;
+                                    Rectangle {
+                                        x: -5px;
+                                        y: -4px;
+                                        width: 10px;
+                                        height: 10px;
+                                        border-radius: 5px;
+                                        background: #ea4335;
+                                    }
+                                }
+                        }
+                }
+            }
+        }
+    }
+}
+
+// ============ MonthView ============
+export component MonthView inherits Rectangle {
+    in property <[MonthCell]> cells: [];    // 42
+    in property <bool> compact: false;
+    callback cell-clicked(int);
+    callback chip-clicked(string);
+
+    background: Theme.bg;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 0px;
+
+        // Weekday header
+        Rectangle {
+            height: 30px;
+            HorizontalLayout {
+                spacing: 0px;
+                for wd in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+                    Text {
+                        text: wd;
+                        horizontal-stretch: 1;
+                        font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 0.8px;
+                        color: Theme.text-faint;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+            }
+        }
+
+        // Grid: 6 rows x 7 cols
+        grid := GridLayout {
+            spacing: 2px;
+            vertical-stretch: 1;
+
+            for dayCell[i] in root.cells:
+                cellRect := Rectangle {
+                    col: Math.mod(i, 7);
+                    row: Math.floor(i / 7);
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+                    border-radius: Theme.r-md;
+                    background: dayCell.outside ? transparent : Theme.surface;
+                    border-width: 1px;
+                    border-color: dayCell.selected ? Theme.accent : Theme.border;
+
+                    cellTouch := TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        clicked => { root.cell-clicked(i); }
+                    }
+
+                    VerticalLayout {
+                        padding-left: 8px;
+                        padding-right: 6px;
+                        padding-top: 5px;
+                        padding-bottom: 4px;
+                        spacing: 2px;
+
+                        // Day number
+                        HorizontalLayout {
+                            Text {
+                                text: dayCell.day-num;
+                                font-size: 12px;
+                                font-weight: dayCell.today ? 700 : 500;
+                                color: dayCell.outside ? Theme.text-faint : (dayCell.today ? Theme.accent : Theme.text);
+                                horizontal-alignment: left;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // Chips
+                        for chipItem in dayCell.chips:
+                            chipTouch := TouchArea {
+                                width: 100%;
+                                height: 17px;
+                                clicked => { root.chip-clicked(chipItem.id); }
+                                Rectangle {
+                                    border-radius: 4px;
+                                    background: chipTouch.has-hover ? chipItem.color.brighter(0.15) : chipItem.color;
+                                    HorizontalLayout {
+                                        x: 5px; y: 0; width: 100%; height: 100%;
+                                        spacing: 4px;
+                                        Text { text: chipItem.title; font-size: 10.5px; font-weight: 600; color: #101418; vertical-alignment: center; overflow: elide; wrap: no-wrap; }
+                                    }
+                                }
+                            }
+
+                        if dayCell.more > 0:
+                            Text {
+                                text: "+" + dayCell.more + " more";
+                                font-size: 10px;
+                                font-weight: 600;
+                                color: Theme.text-dim;
+                                padding-left: 4px;
+                            }
+                    }
+                }
+        }
+    }
+}
+
+// ============ YearView ============
+export component YearView inherits Rectangle {
+    in property <[YearMonth]> months: [];
+    in property <int> current-month: -1;
+    callback month-clicked(int);
+    callback day-clicked(int, int); // month index, day
+
+    background: Theme.bg;
+
+    Flickable {
+        content-width: self.width;
+        content-height: yearGrid.preferred-height;
+
+        yearGrid := GridLayout {
+            padding: 18px;
+            spacing: 22px;
+
+            for month[mi] in root.months:
+                VerticalLayout {
+                    col: Math.mod(mi, 3);
+                    row: Math.floor(mi / 3);
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+
+                    // Month name
+                    monthTouch := TouchArea {
+                        height: 22px;
+                        clicked => { root.month-clicked(mi); }
+                        Text {
+                            x: 6px;
+                            text: month.name;
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: mi == root.current-month ? Theme.accent : Theme.text;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // Weekday header
+                    HorizontalLayout {
+                        spacing: 0px;
+                        for wd in ["M", "T", "W", "T", "F", "S", "S"]:
+                            Text {
+                                text: wd;
+                                width: 38px;
+                                font-size: 9px;
+                                font-weight: 700;
+                                color: Theme.text-faint;
+                                horizontal-alignment: center;
+                            }
+                    }
+
+                    // Day cells (real days only; positioned via lead offset)
+                    daysGrid := GridLayout {
+                        spacing: 0px;
+                        for dayCell[ci] in month.days:
+                            yearDayCell := Rectangle {
+                                col: Math.mod(ci + month.lead, 7);
+                                row: Math.floor((ci + month.lead) / 7);
+                                width: 38px;
+                                height: 30px;
+                                border-radius: 15px;
+                                background: dayCell.today ? Theme.accent : (dayTouch.has-hover ? Theme.surface-2 : transparent);
+
+                                dayTouch := TouchArea {
+                                    width: 100%;
+                                    height: 100%;
+                                    clicked => { root.day-clicked(mi, dayCell.day); }
+                                }
+
+                                Text {
+                                    text: dayCell.day;
+                                    font-size: 11px;
+                                    font-weight: dayCell.today ? 700 : 400;
+                                    color: dayCell.today ? Theme.on-accent : Theme.text;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                // busy dot
+                                if dayCell.busy && !dayCell.today:
+                                    Rectangle {
+                                        y: parent.height - 5px;
+                                        x: (parent.width - 4px) / 2;
+                                        width: 4px;
+                                        height: 4px;
+                                        border-radius: 2px;
+                                        background: Theme.accent;
+                                    }
+                            }
+                    }
+                }
+        }
+    }
+}

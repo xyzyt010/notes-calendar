@@ -1,0 +1,575 @@
+// yellod Calendar — main window.
+// Top bar (menu · logo · today/nav · date title · scope switcher · create)
+// → optional sidebar (mini month · calendars · upcoming) + scope views.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconGhost, IconMenu, IconPlus, IconChevronLeft, IconChevronRight, IconCheck,
+    IconCalendarDays, IconBell, IconMapPin, IconX, IconTrash, IconMoon, IconSun, IconSettings,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, TextButton, SidebarRow, Divider, Toast, ConfirmDialog,
+} from "../../shared-ui/components.slint";
+import { TimelineView, MonthView, YearView } from "views.slint";
+import {
+    TimelineColumn, MonthChip, MonthCell, YearMonth, YearDay, SidebarCalendar, UpcomingEvent, MiniDay, CalendarChip,
+} from "models.slint";
+import { ReminderOption, EventColor } from "dialog.slint";
+import { EventDialog } from "dialog.slint";
+
+
+// ============ SwitcherButton (segmented control) ============
+component SwitcherButton inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> selected: false;
+    callback clicked();
+
+    height: 34px;
+    horizontal-stretch: 1;
+    border-radius: 17px;
+    background: root.selected ? Theme.surface : transparent;
+    drop-shadow-blur: root.selected ? 6px : 0px;
+    drop-shadow-color: #00000030;
+    animate background { duration: 130ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.label;
+            font-size: 12px;
+            font-weight: root.selected ? 700 : 500;
+            color: root.selected ? Theme.accent : Theme.text-dim;
+            horizontal-alignment: center;
+        }
+    }
+}
+export component MainWindow inherits Window {
+    title: "Calendar";
+    icon: @image-url("../../../assets/calendar-icon.png");
+    default-font-family: "Inter";
+    background: Theme.bg;
+    preferred-width: 880px;
+    preferred-height: 600px;
+
+    in-out property <length> debug-width: root.width;
+    in-out property <bool> dark: true;
+    in-out property <bool> sidebar-open: true;
+    in-out property <int> view: 2;                    // 0 day · 1 week · 2 month · 3 year
+    in-out property <string> date-title: "November 2026";
+    in-out property <int> event-count: 0;
+
+    // Day/Week timeline
+    in-out property <[TimelineColumn]> day-columns: [];
+    in-out property <[TimelineColumn]> week-columns: [];
+    in-out property <[MonthChip]> all-day: [];
+    in-out property <int> now-min: 0;
+
+    // Month
+    in-out property <[MonthCell]> month-cells: [];
+
+    // Year
+    in-out property <[YearMonth]> year-months: [];
+    in-out property <int> current-month: -1;
+
+    // Sidebar
+    in-out property <string> mini-month-title: "November 2026";
+    in-out property <[MiniDay]> mini-days: [];       // 42 cells
+    in-out property <int> mini-lead: 0;
+    in-out property <[SidebarCalendar]> calendars: [];
+    in-out property <[UpcomingEvent]> upcoming: [];
+
+    // Event dialog
+    in-out property <bool> show-dialog: false;
+    in-out property <bool> dialog-editing: false;
+    in-out property <string> dialog-title;
+    in-out property <string> dialog-start;
+    in-out property <string> dialog-end;
+    in-out property <string> dialog-location;
+    in-out property <string> dialog-notes;
+    in-out property <bool> dialog-all-day: false;
+    in-out property <int> dialog-recurrence: 0;
+    in-out property <[ReminderOption]> dialog-reminders: [];
+    in-out property <[EventColor]> dialog-colors: [];
+    in-out property <[CalendarChip]> dialog-calendars: [];
+    in-out property <int> dialog-calendar: 0;
+
+    // Chrome
+    in-out property <bool> show-settings: false;
+    in-out property <bool> show-delete: false;
+    in-out property <string> toast-message: "";
+    in-out property <bool> toast-visible: false;
+    in-out property <string> reminder-text: "";
+    in-out property <bool> reminder-visible: false;
+
+    // ---------- Actions ----------
+    callback new-event();
+    callback today();
+    callback nav-previous();
+    callback nav-next();
+    callback view-changed(int);
+    callback toggle-sidebar();
+    callback mini-month-nav(int);      // -1 / +1 months
+    callback day-selected(int);        // day-of-month, current mini month
+    callback calendar-toggled(string);
+    callback event-clicked(string);    // open editor for event id
+    callback slot-clicked(int, int);   // day-index, minutes
+    callback month-cell-clicked(int);  // cell index 0..41
+    callback chip-clicked(string);
+    callback month-clicked(int);       // year view → month index
+    callback year-day-clicked(int, int); // month index, day
+    callback week-event-clicked(string, int);
+    callback save-event();
+    callback cancel-event();
+    callback delete-event();
+    callback delete-confirmed();
+    callback reminder-toggled(int);
+    callback color-picked(int);
+    callback calendar-picked(int);
+    callback recurrence-picked(int);
+    callback toggle-theme();
+    callback toggle-all-day();
+    callback dismiss-reminder();
+
+    // ---------- Chrome timers ----------
+    Timer {
+        interval: 60s;
+        running: true;
+        triggered => { root.reminder-tick(); }
+    }
+    callback reminder-tick();
+
+    toastTimer := Timer {
+        interval: 3.4s;
+        running: root.toast-visible;
+        triggered => { root.toast-visible = false; }
+    }
+
+    app := Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.bg;
+
+        VerticalLayout {
+            // ============ TOP BAR ============
+            Rectangle {
+                height: 64px;
+                background: Theme.bg;
+                Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+
+                // top bar — fixed coordinates (robust across DPI/scale)
+                hamburgerBtn := IconButton {
+                    x: 10px;
+                    y: 11px;
+                    size: 40px;
+                    clicked => { root.toggle-sidebar(); }
+                    IconMenu { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                }
+                glyphSlot := Rectangle {
+                    x: 62px;
+                    y: 18px;
+                    width: 28px;
+                    height: 28px;
+                    VerticalLayout { alignment: center; HorizontalLayout { alignment: center; IconCalendarDays { stroke-color: Theme.accent; preferred-width: 22px; preferred-height: 22px; } } }
+                }
+                todayBtn := Rectangle {
+                    x: 108px;
+                    y: 17px;
+                    width: 70px;
+                    height: 30px;
+                    border-radius: 15px;
+                    background: Theme.surface-2;
+                    todayTouch := TouchArea { mouse-cursor: pointer; clicked => { root.today(); } }
+                    VerticalLayout { alignment: center; Text { text: "Today"; font-size: 12.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; } }
+                }
+                prevBtn := IconButton {
+                    x: 188px;
+                    y: 11px;
+                    size: 40px;
+                    clicked => { root.nav-previous(); }
+                    IconChevronLeft { stroke-color: Theme.text-dim; preferred-width: 18px; preferred-height: 18px; }
+                }
+                nextBtn := IconButton {
+                    x: 236px;
+                    y: 11px;
+                    size: 40px;
+                    clicked => { root.nav-next(); }
+                    IconChevronRight { stroke-color: Theme.text-dim; preferred-width: 18px; preferred-height: 18px; }
+                }
+                dateTitle := Text {
+                    x: 290px;
+                    y: 0px;
+                    height: 64px;
+                    vertical-alignment: center;
+                    text: root.date-title;
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    wrap: no-wrap;
+                }
+
+                switcher := Rectangle {
+                    x: 690px;
+                    y: 14px;
+                    width: 172px;
+                    height: 36px;
+                    border-radius: 18px;
+                    background: Theme.surface-2;
+                    HorizontalLayout {
+                        padding: 4px;
+                        spacing: 2px;
+                        SwitcherButton { label: "Day"; selected: root.view == 0; clicked => { root.view-changed(0); } }
+                        SwitcherButton { label: "Week"; selected: root.view == 1; clicked => { root.view-changed(1); } }
+                        SwitcherButton { label: "Month"; selected: root.view == 2; clicked => { root.view-changed(2); } }
+                        SwitcherButton { label: "Year"; selected: root.view == 3; clicked => { root.view-changed(3); } }
+                    }
+                }
+                newEventBtn := Rectangle {
+                    x: 872px;
+                    y: 14px;
+                    width: 132px;
+                    height: 36px;
+                    border-radius: 18px;
+                    background: Theme.accent;
+                    newTouch := TouchArea { mouse-cursor: pointer; clicked => { root.new-event(); } }
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        IconPlus { stroke-color: Theme.on-accent; preferred-width: 15px; preferred-height: 15px; }
+                        Text { text: "Create"; font-size: 12.5px; font-weight: 700; color: Theme.on-accent; vertical-alignment: center; }
+                    }
+                }
+                themeBtn := IconButton {
+                    x: 1016px;
+                    y: 11px;
+                    size: 40px;
+                    clicked => { root.toggle-theme(); }
+                    if Theme.dark:
+                        IconSun { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; }
+                    if !Theme.dark:
+                        IconMoon { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; }
+                }
+            }
+            // ============ MAIN ROW ============
+            HorizontalLayout {
+                spacing: 0px;
+
+                // ---- Sidebar ----
+                if root.sidebar-open:
+                    sidebar := Rectangle {
+                        width: 264px;
+                        background: Theme.bg;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 4px;
+
+                            // ===== Mini month =====
+                            Rectangle {
+                                height: 232px;
+                                border-radius: Theme.r-lg;
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                VerticalLayout {
+                                    padding: 10px;
+                                    spacing: 2px;
+
+                                    // mini header with nav
+                                    HorizontalLayout {
+                                        height: 30px;
+                                        Text {
+                                            text: root.mini-month-title;
+                                            font-size: 13px;
+                                            font-weight: 700;
+                                            color: Theme.text;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                        }
+                                        IconButton { size: 26px; clicked => { root.mini-month-nav(-1); } IconChevronLeft { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                                        IconButton { size: 26px; clicked => { root.mini-month-nav(1); } IconChevronRight { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                                    }
+                                    // weekday header
+                                    HorizontalLayout {
+                                        spacing: 0px;
+                                        for wd in ["M", "T", "W", "T", "F", "S", "S"]:
+                                            Text { text: wd; width: 34px; font-size: 9px; font-weight: 700; color: Theme.text-faint; horizontal-alignment: center; }
+                                    }
+                                    // days grid: 6 rows x 7 cols
+                                    GridLayout {
+                                        spacing: 0px;
+                                        vertical-stretch: 1;
+                                        for dayCell[i] in root.mini-days:
+                                            miniDay := Rectangle {
+                                                    col: Math.mod(i + root.mini-lead, 7);
+                                                    row: Math.floor((i + root.mini-lead) / 7);
+                                                    width: 34px;
+                                                    height: 26px;
+                                                    border-radius: 13px;
+                                                    background: dayCell.today ? Theme.accent : (dayCell.selected ? Theme.accent-soft : (miniTouch.has-hover ? Theme.surface-2 : transparent));
+
+                                                    miniTouch := TouchArea {
+                                                        width: 100%; height: 100%;
+                                                        mouse-cursor: pointer;
+                                                        clicked => { root.day-selected(dayCell.day); }
+                                                    }
+                                                    Text {
+                                                        text: dayCell.day;
+                                                        font-size: 11px;
+                                                        font-weight: dayCell.today ? 700 : 400;
+                                                        color: dayCell.today ? Theme.on-accent : (dayCell.selected ? Theme.accent : Theme.text);
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    if dayCell.busy && !dayCell.today:
+                                                        Rectangle {
+                                                            y: parent.height - 3.5px;
+                                                            x: (parent.width - 3px) / 2;
+                                                            width: 3px;
+                                                            height: 3px;
+                                                            border-radius: 1.5px;
+                                                            background: Theme.text-faint;
+                                                        }
+                                                }
+                                    }
+                                }
+                            }
+
+                            // ===== My calendars =====
+                            HorizontalLayout {
+                                height: 30px;
+                                padding-left: 6px;
+                                padding-top: 2px;
+                                Text { text: "MY CALENDARS"; font-size: 10px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+                            }
+                            for cal in root.calendars:
+                                calRow := TouchArea {
+                                    height: 32px;
+                                    clicked => { root.calendar-toggled(cal.id); }
+                                    Rectangle {
+                                        border-radius: Theme.r-md;
+                                        background: calRow.has-hover ? Theme.surface-2 : transparent;
+                                    }
+                                    HorizontalLayout {
+                                        x: 6px;
+                                        y: 0;
+                                        width: 100%;
+                                        height: 100%;
+                                        spacing: 9px;
+                                        // checkbox
+                                        Rectangle {
+                                            width: 15px;
+                                            height: 15px;
+                                            y: 8px;
+                                            border-radius: 4px;
+                                            background: cal.visible ? Theme.accent : transparent;
+                                            border-width: 1.5px;
+                                            border-color: cal.visible ? Theme.accent : Theme.border-strong;
+                                            if cal.visible:
+                                                VerticalLayout { alignment: center; HorizontalLayout { alignment: center; IconCheck { stroke-color: Theme.on-accent; preferred-width: 11px; preferred-height: 11px; } } }
+                                        }
+                                        Rectangle { width: 8px; height: 8px; border-radius: 4px; background: cal.color; y: 12px; }
+                                        Text { text: cal.name; font-size: 12.5px; color: cal.visible ? Theme.text : Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+                                        Text { text: cal.count; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; padding-right: 6px; }
+                                    }
+                                }
+
+                            // ===== Upcoming =====
+                            HorizontalLayout {
+                                height: 30px;
+                                padding-left: 6px;
+                                padding-top: 6px;
+                                Text { text: "UPCOMING"; font-size: 10px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; }
+                            }
+                            for ev in root.upcoming:
+                                evRow := TouchArea {
+                                    height: 42px;
+                                    clicked => { root.event-clicked(ev.id); }
+                                    Rectangle {
+                                        border-radius: Theme.r-md;
+                                        background: evRow.has-hover ? Theme.surface-2 : transparent;
+                                    }
+                                    HorizontalLayout {
+                                        x: 6px;
+                                        y: 0;
+                                        width: 100%;
+                                        height: 100%;
+                                        spacing: 9px;
+                                        Rectangle { width: 3px; height: 26px; border-radius: 1.5px; background: ev.color; y: 8px; }
+                                        VerticalLayout {
+                                            spacing: 1px;
+                                            Text { text: ev.title; font-size: 12px; font-weight: 600; color: Theme.text; overflow: elide; wrap: no-wrap; }
+                                            Text { text: ev.time-label; font-size: 10.5px; color: Theme.text-faint; }
+                                        }
+                                    }
+                                }
+                            if root.upcoming.length == 0:
+                                Text {
+                                    text: "Nothing upcoming yet.";
+                                    font-size: 11.5px;
+                                    color: Theme.text-faint;
+                                    padding-left: 6px;
+                                    padding-top: 2px;
+                                }
+
+                            Rectangle {} // spring
+                            Divider {}
+                            Text {
+                                text: "Local-first · Private";
+                                font-size: 10px;
+                                color: Theme.text-faint;
+                                padding-left: 6px;
+                                padding-top: 6px;
+                            }
+                        }
+                    }
+
+                if root.sidebar-open:
+                    Rectangle { width: 1px; background: Theme.border; }
+
+                // ============ SCOPE VIEWS ============
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.bg;
+
+                    if root.view == 0:
+                        TimelineView {
+                            columns: root.day-columns;
+                            all-day: root.all-day;
+                            week-mode: false;
+                            now-min: root.now-min;
+                            event-clicked(id, day) => { root.week-event-clicked(id, day); }
+                            slot-clicked(day, minutes) => { root.slot-clicked(day, minutes); }
+                        }
+                    if root.view == 1:
+                        TimelineView {
+                            columns: root.week-columns;
+                            all-day: root.all-day;
+                            week-mode: true;
+                            now-min: root.now-min;
+                            event-clicked(id, day) => { root.week-event-clicked(id, day); }
+                            slot-clicked(day, minutes) => { root.slot-clicked(day, minutes); }
+                        }
+                    if root.view == 2:
+                        MonthView {
+                            cells: root.month-cells;
+                            compact: root.width < 760px;
+                            cell-clicked(i) => { root.month-cell-clicked(i); }
+                            chip-clicked(id) => { root.chip-clicked(id); }
+                        }
+                    if root.view == 3:
+                        YearView {
+                            months: root.year-months;
+                            current-month: root.current-month;
+                            month-clicked(i) => { root.month-clicked(i); }
+                            day-clicked(mi, d) => { root.year-day-clicked(mi, d); }
+                        }
+                }
+            }
+
+            // ============ STATUS BAR ============
+            Rectangle {
+                height: 26px;
+                Rectangle { y: 0; width: parent.width; height: 1px; background: Theme.border; }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 8px;
+                    Text {
+                        text: "Everything is stored locally on this device.";
+                        font-size: 10.5px;
+                        color: Theme.text-faint;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: root.event-count + " events in view";
+                        font-size: 10.5px;
+                        color: Theme.text-faint;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // ============ REMINDER BANNER ============
+        if root.reminder-visible:
+            reminderBanner := Rectangle {
+                y: 76px;
+                height: 52px;
+                width: min(560px, parent.width - 48px);
+                x: (parent.width - self.width) / 2;
+                border-radius: Theme.r-md;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.accent;
+                drop-shadow-blur: 24px;
+                drop-shadow-color: #00000055;
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 8px;
+                    spacing: 10px;
+                    VerticalLayout { alignment: center; IconBell { stroke-color: Theme.accent; preferred-width: 20px; preferred-height: 20px; } }
+                    Text {
+                        text: root.reminder-text;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                    IconButton { size: 34px; clicked => { root.dismiss-reminder(); } IconX { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+                }
+            }
+
+        // ============ EVENT DIALOG ============
+        if root.show-dialog:
+            EventDialog {
+                editing: root.dialog-editing;
+                title <=> root.dialog-title;
+                start-time <=> root.dialog-start;
+                end-time <=> root.dialog-end;
+                location <=> root.dialog-location;
+                notes <=> root.dialog-notes;
+                all-day <=> root.dialog-all-day;
+                recurrence-index <=> root.dialog-recurrence;
+                reminders <=> root.dialog-reminders;
+                colors <=> root.dialog-colors;
+                calendars <=> root.dialog-calendars;
+                selected-calendar <=> root.dialog-calendar;
+                saved => { root.save-event(); }
+                cancelled => { root.cancel-event(); }
+                deleted => { root.delete-event(); }
+                reminder-toggled(i) => { root.reminder-toggled(i); }
+                color-picked(i) => { root.color-picked(i); }
+                calendar-picked(i) => { root.calendar-picked(i); }
+                recurrence-picked(i) => { root.recurrence-picked(i); }
+            }
+
+        // ============ DELETE CONFIRM ============
+        if root.show-delete:
+            ConfirmDialog {
+                title: "Delete event?";
+                message: "This event will be permanently deleted. This action cannot be undone.";
+                confirm-label: "Delete";
+                danger: true;
+                confirmed => { root.delete-confirmed(); }
+                cancelled => { root.show-delete = false; }
+            }
+
+        // ============ TOAST ============
+        if root.toast-visible:
+            Toast {
+                width: 320px;
+                x: (app.width - self.width) / 2;
+                y: app.height - 66px;
+                message: root.toast-message;
+            }
+    }
+}

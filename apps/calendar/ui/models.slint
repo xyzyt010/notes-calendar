@@ -1,0 +1,78 @@
+// Shared data models for the calendar UI. Plain structs, no components.
+
+export struct HourEventRect {
+    id: string,
+    title: string,
+    color: color,
+    top-min: float,
+    height-min: float,
+    col: float,
+    cols: float,
+    time-label: string,
+}
+
+export struct WeekDay {
+    label: string,      // "Tue"
+    day-num: string,    // "11"
+    full: string,       // "Tuesday, Nov 11"
+    today: bool,
+}
+
+export struct TimelineColumn {
+    day: WeekDay,
+    blocks: [HourEventRect],
+}
+
+export struct MonthChip {
+    id: string,
+    title: string,
+    color: color,
+}
+
+export struct MonthCell {
+    day-num: string,
+    today: bool,
+    outside: bool,
+    selected: bool,
+    chips: [MonthChip],
+    more: int,
+}
+
+export struct YearDay {
+    day: int,           // 0 = blank cell
+    busy: bool,
+    today: bool,
+}
+
+export struct YearMonth {
+    name: string,       // "January"
+    lead: int,          // weekday index (0=Mon) of the 1st
+    days: [YearDay],    // real days only (1..dim), positioned via lead
+}
+
+export struct SidebarCalendar {
+    id: string,
+    name: string,
+    color: color,
+    visible: bool,
+    count: string,
+}
+
+export struct UpcomingEvent {
+    id: string,
+    title: string,
+    time-label: string,
+    color: color,
+}
+
+export struct MiniDay {
+    day: int,
+    today: bool,
+    selected: bool,
+    busy: bool,
+}
+
+export struct CalendarChip {
+    name: string,
+    color: color,
+}

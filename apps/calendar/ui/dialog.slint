@@ -1,0 +1,304 @@
+// Event editor dialog — create & edit events with reminders and recurrence.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconClock, IconMapPin, IconRepeat, IconBell, IconCalendarDays, IconTrash, IconX, IconCheck,
+} from "../../shared-ui/icons.slint";
+import { IconButton, TextButton, Input } from "../../shared-ui/components.slint";
+import { CalendarChip } from "models.slint";
+
+export struct ReminderOption {
+    label: string,
+    minutes: int,
+    on: bool,
+}
+
+export struct EventColor {
+    color: color,
+    on: bool,
+}
+
+
+// Small repeat chip
+component RepeatChip inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> selected: false;
+    callback clicked();
+
+    height: 30px;
+    horizontal-stretch: 0;
+    border-radius: 15px;
+    background: root.selected ? Theme.accent-soft : Theme.surface-2;
+    border-width: 1px;
+    border-color: root.selected ? Theme.accent : transparent;
+
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    VerticalLayout {
+        alignment: center;
+        padding-left: 12px;
+        padding-right: 12px;
+        Text {
+            text: root.label;
+            font-size: 11.5px;
+            font-weight: root.selected ? 700 : 500;
+            color: root.selected ? Theme.accent : Theme.text-dim;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Small reminder chip
+component ReminderChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> on: false;
+    callback clicked();
+
+    height: 28px;
+    horizontal-stretch: 0;
+    border-radius: 14px;
+    background: root.on ? Theme.accent-soft : Theme.surface-2;
+    border-width: 1px;
+    border-color: root.on ? Theme.accent : transparent;
+
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    VerticalLayout {
+        alignment: center;
+        padding-left: 10px;
+        padding-right: 10px;
+        Text {
+            text: root.label;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: root.on ? Theme.accent : Theme.text-dim;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Flexible reminder chip grid (wraps)
+component FlexibleGrid inherits VerticalLayout {
+    in property <[ReminderOption]> model: [];
+    callback clicked(int);
+
+    spacing: 6px;
+
+    HorizontalLayout { spacing: 6px; for opt[i] in root.model: ReminderChip { label: opt.label; on: opt.on; clicked => { root.clicked(i); } } }
+}
+
+export component EventDialog inherits Rectangle {
+    in property <bool> editing: false;
+    in-out property <string> title;
+    in-out property <string> start-time;     // "Nov 11, 3:30 PM"
+    in-out property <string> end-time;
+    in-out property <string> location;
+    in-out property <string> notes;
+    in-out property <bool> all-day: false;
+    in-out property <int> recurrence-index: 0;      // 0 None 1 Daily 2 Weekly 3 Monthly 4 Yearly 5 Weekdays
+    in-out property <[ReminderOption]> reminders: [];
+    in-out property <[EventColor]> colors: [];
+    in-out property <[CalendarChip]> calendars: [];
+    in-out property <int> selected-calendar: 0;
+
+    callback saved();
+    callback cancelled();
+    callback deleted();
+    callback reminder-toggled(int);
+    callback color-picked(int);
+    callback calendar-picked(int);
+    callback recurrence-picked(int);
+
+    width: 100%;
+    height: 100%;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.scrim;
+        TouchArea { clicked => { root.cancelled(); } }
+    }
+
+    card := Rectangle {
+        width: min(520px, parent.width - 40px);
+        x: (parent.width - self.width) / 2;
+        y: max(20px, (parent.height - self.height) / 2 - 40px);
+        height: layout.preferred-height;
+        border-radius: Theme.r-lg;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 36px;
+        drop-shadow-color: #00000066;
+
+        layout := VerticalLayout {
+            padding: 24px;
+            spacing: 14px;
+
+            // ===== Header =====
+            HorizontalLayout {
+                Text {
+                    text: root.editing ? "Edit event" : "New event";
+                    font-size: 17px;
+                    font-weight: 700;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                IconButton { size: 32px; clicked => { root.cancelled(); } IconX { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            }
+
+            // ===== Title =====
+            titleArea := Rectangle {
+                height: 42px;
+                titleInput := TextInput {
+                    width: 100%;
+                    height: 100%;
+                    single-line: true;
+                    font-size: 21px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    selection-background-color: Theme.accent-soft;
+                    selection-foreground-color: Theme.text;
+                    text <=> root.title;
+                    key-pressed(event) => {
+                        if event.text == "\n" { return accept; }
+                        reject
+                    }
+                }
+                if root.title == "":
+                    Text {
+                        width: 100%;
+                        height: 100%;
+                        vertical-alignment: center;
+                        text: "Event title";
+                        font-size: 21px;
+                        font-weight: 600;
+                        color: Theme.text-faint;
+                    }
+            }
+
+            // ===== When =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; VerticalLayout { alignment: center; IconClock { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } } }
+                VerticalLayout {
+                    spacing: 4px;
+                    horizontal-stretch: 1;
+                    Text { text: "START"; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
+                    Text { text: root.start-time; font-size: 13.5px; font-weight: 600; color: Theme.text; }
+                }
+                TextButton {
+                    label: root.all-day ? "All day" : "Timed";
+                    clicked => { root.all-day = !root.all-day; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "END"; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
+                    Text { text: root.end-time; font-size: 13.5px; font-weight: 600; color: Theme.text-dim; }
+                }
+            }
+
+            // ===== Repeat =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; VerticalLayout { alignment: center; IconRepeat { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } } }
+                RepeatChip { label: "None"; selected: root.recurrence-index == 0; clicked => { root.recurrence-picked(0); } }
+                RepeatChip { label: "Daily"; selected: root.recurrence-index == 1; clicked => { root.recurrence-picked(1); } }
+                RepeatChip { label: "Weekly"; selected: root.recurrence-index == 2; clicked => { root.recurrence-picked(2); } }
+                RepeatChip { label: "Monthly"; selected: root.recurrence-index == 3; clicked => { root.recurrence-picked(3); } }
+                RepeatChip { label: "Yearly"; selected: root.recurrence-index == 4; clicked => { root.recurrence-picked(4); } }
+                RepeatChip { label: "Weekdays"; selected: root.recurrence-index == 5; clicked => { root.recurrence-picked(5); } }
+            }
+
+            // ===== Location =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; VerticalLayout { alignment: center; IconMapPin { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } } }
+                Input { horizontal-stretch: 1; placeholder: "Location (optional)"; text <=> root.location; }
+            }
+
+            // ===== Notes =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; }
+                notesArea := Rectangle {
+                    horizontal-stretch: 1;
+                    height: 54px;
+                    notesInput := TextInput {
+                        width: 100%;
+                        height: 100%;
+                        single-line: false;
+                        wrap: word-wrap;
+                        font-size: 13px;
+                        color: Theme.text;
+                        selection-background-color: Theme.accent-soft;
+                        selection-foreground-color: Theme.text;
+                        text <=> root.notes;
+                    }
+                    if root.notes == "":
+                        Text {
+                            x: 2px;
+                            width: 100%;
+                            height: 100%;
+                            text: "Notes (optional)";
+                            font-size: 13px;
+                            color: Theme.text-faint;
+                        }
+                }
+            }
+
+            // ===== Reminders =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; VerticalLayout { alignment: center; IconBell { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } } }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    FlexibleGrid { model: root.reminders; clicked(i) => { root.reminder-toggled(i); } }
+                }
+            }
+
+            // ===== Color =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; }
+                for color[i] in root.colors:
+                    swatch := Rectangle {
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 12px;
+                        background: color.color;
+                        border-width: color.on ? 2.5px : 0px;
+                        border-color: Theme.text;
+                        TouchArea { mouse-cursor: pointer; clicked => { root.color-picked(i); } }
+                    }
+            }
+
+            // ===== Calendar picker =====
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { width: 22px; VerticalLayout { alignment: center; IconCalendarDays { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } } }
+                for cal[i] in root.calendars:
+                    TextButton {
+                        label: cal.name;
+                        emphasis: root.selected-calendar == i;
+                        clicked => { root.calendar-picked(i); }
+                    }
+            }
+
+            // ===== Footer buttons =====
+            HorizontalLayout {
+                spacing: 10px;
+                if root.editing:
+                    IconButton { size: 42px; clicked => { root.deleted(); } IconTrash { stroke-color: Theme.danger; preferred-width: 19px; preferred-height: 19px; } }
+                Rectangle {} // spring
+                TextButton { label: "Cancel"; clicked => { root.cancelled(); } }
+                TextButton { label: root.editing ? "Save" : "Create"; emphasis: true; clicked => { root.saved(); } }
+            }
+        }
+    }
+}
