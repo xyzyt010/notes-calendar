@@ -21,8 +21,18 @@ Plus Rust-based web front/backends under `web/` (axum), hosted on the VM
 ## Phases
 
 1. **Notes native app** — UI faithful to the notes.yellod.dpdns.org inspiration,
-   fully functional (markdown notes, search, tags, folders, favorites, offline-first).
-2. **CI/CD** — build matrix, artifacts, release drafts.
-3. **Calendar native app** — hour/day/week/month/year scopes, reminders, events, recurrence.
+   fully functional (markdown notes, search, tags, folders, favorites, offline-first). ✅ Done, verified on Windows.
+2. **CI/CD** — build matrix, artifacts, release drafts. ✅ Workflows in place (`ci.yml`, `release.yml`).
+3. **Calendar native app** — hour/day/week/month/year scopes, reminders, events, recurrence. ✅ Done, verified on Windows.
 4. **Web** — Rust (axum) static+API; calendar.yellod.dpdns.org with auth like notes.
-5. **Verify** — vision-verified on Windows; polish until professional.
+   ✅ Backend + dark frontends built & locally verified; deployment to VM pending tunnel config.
+5. **Verify** — vision-verified on Windows; polish until professional. ✅ Both native apps verified; web suite verified locally; tunnel verification pending.
+
+## Deployment notes
+
+- `suite-web` (Rust/axum) serves both web apps on `127.0.0.1:8760` on the VM.
+- The existing `notes.yellod.dpdns.org` deployment (wrangler on :8787) is untouched.
+- Tunnel routing for `calendar.yellod.dpdns.org` → `127.0.0.1:8760` requires the
+  root-owned `/etc/cloudflared/config.yml` (or Zero Trust dashboard) — user action needed.
+- `deploy/suite-web.service` (systemd system unit) and `deploy/suite-web.user.service`
+  provided; DB at `~hs01/suite-web/suite.db` (created on first run; WAL mode).

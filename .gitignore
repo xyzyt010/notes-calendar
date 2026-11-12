@@ -46,3 +46,13 @@ __MACOSX/
 probe*.ps1
 probe*.sh
 *.log
+
+# Local databases / runtime state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+suite.err
+suite.log

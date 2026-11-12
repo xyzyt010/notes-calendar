@@ -1,0 +1,27 @@
+[Unit]
+Description=yellod suite (Notes & Calendar web apps) — Rust/axum backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hs01
+Group=hs01
+WorkingDirectory=/home/hs01/suite-web
+Environment=SUITE_STATIC_DIR=/home/hs01/suite-web/static
+Environment=SUITE_DB=/home/hs01/suite-web/suite.db
+Environment=SUITE_BIND=127.0.0.1:8760
+# First run uses the built-in default password "admin" (bcrypt).
+# To change it, set SUITE_ADMIN_PASSWORD_HASH to a bcrypt hash of your password:
+#   htpasswd -bnBC 12 admin 'your-password' | cut -d: -f2
+# Environment=SUITE_ADMIN_PASSWORD_HASH=$2b$12$...
+ExecStart=/home/hs01/suite-web/suite-web
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=yellod suite (Notes & Calendar web apps) — user service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/suite-web
+Environment=SUITE_STATIC_DIR=%h/suite-web/static
+Environment=SUITE_DB=%h/suite-web/suite.db
+Environment=SUITE_BIND=127.0.0.1:8760
+ExecStart=%h/suite-web/suite-web
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
