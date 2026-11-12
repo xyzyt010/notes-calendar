@@ -4,6 +4,7 @@ members = [
     "apps/notes",
     "apps/calendar",
     "crates/ycore",
+    "web/suite",
 ]
 
 [workspace.package]

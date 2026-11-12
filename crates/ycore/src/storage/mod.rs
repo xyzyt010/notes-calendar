@@ -24,12 +24,23 @@ pub fn open_memory() -> rusqlite::Result<Connection> {
 
 pub fn open_notes_db(path: &Path) -> rusqlite::Result<Connection> {
     let conn = open_db(path)?;
-    notes::migrate(&conn)?;
+    create_notes_schema(&conn)?;
     Ok(conn)
 }
 
 pub fn open_calendar_db(path: &Path) -> rusqlite::Result<Connection> {
     let conn = open_db(path)?;
-    calendar::migrate(&conn)?;
+    create_calendar_schema(&conn)?;
     Ok(conn)
+}
+
+/// Apply the notes schema to an existing connection (for the web suite, which
+/// keeps notes and calendar in one SQLite file).
+pub fn create_notes_schema(conn: &Connection) -> rusqlite::Result<()> {
+    notes::migrate(conn)
+}
+
+/// Apply the calendar schema to an existing connection.
+pub fn create_calendar_schema(conn: &Connection) -> rusqlite::Result<()> {
+    calendar::migrate(conn)
 }
