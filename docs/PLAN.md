@@ -22,11 +22,19 @@ Plus Rust-based web front/backends under `web/` (axum), hosted on the VM
 
 1. **Notes native app** — UI faithful to the notes.yellod.dpdns.org inspiration,
    fully functional (markdown notes, search, tags, folders, favorites, offline-first). ✅ Done, verified on Windows.
-2. **CI/CD** — build matrix, artifacts, release drafts. ✅ Workflows in place (`ci.yml`, `release.yml`).
+2. **CI/CD** — build matrix, artifacts, release drafts. ✅ Workflows green on `main` (macOS arm64 needs `macos-14` host for runner availability).
 3. **Calendar native app** — hour/day/week/month/year scopes, reminders, events, recurrence. ✅ Done, verified on Windows.
 4. **Web** — Rust (axum) static+API; calendar.yellod.dpdns.org with auth like notes.
-   ✅ Backend + dark frontends built & locally verified; deployment to VM pending tunnel config.
-5. **Verify** — vision-verified on Windows; polish until professional. ✅ Both native apps verified; web suite verified locally; tunnel verification pending.
+   ✅ Backend + dark frontends built & locally verified; deployment to VM done (user service on 127.0.0.1:8760); tunnel ingress pending user action.
+5. **Verify** — vision-verified on Windows; web suite verified locally; tunnel verification pending.
+
+## Native rendering note (important)
+
+Both apps use Slint's **software renderer** (`renderer-software`), not OpenGL.
+Reason: on some Windows machines (Intel UHD graphics) femtovg/glutin paints a blank
+white window with no error; Slint's GL fallback chain cannot engage because femtovg
+fails lazily. CPU rasterization renders correctly everywhere and is ample for flat
+note/calendar UIs. Android APKs keep the same configuration for consistency.
 
 ## Deployment notes
 
