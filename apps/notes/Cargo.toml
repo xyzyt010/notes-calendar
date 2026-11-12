@@ -13,10 +13,12 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-arboard = "3"
 dirs = "6"
 anyhow.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+arboard = "3"
 
 [build-dependencies]
 slint-build = "1.18.1"
@@ -44,6 +46,12 @@ target_sdk_version = 35
 
 [package.metadata.android.application]
 label = "Notes"
+
+[package.metadata.android.signing.release]
+path = "../../yellod-release.keystore"
+alias = "yellod"
+keystore_password = "ci_placeholder"
+key_password = "ci_placeholder"
 
 [package.metadata.deb]
 name = "notes"

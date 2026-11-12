@@ -743,7 +743,6 @@ name = "calendar"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "arboard",
  "chrono",
  "dirs",
  "embed-resource",

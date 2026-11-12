@@ -255,8 +255,6 @@ fn deselect_after_leaving_view(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
 // ---------- entry point ----------
 
 pub fn run() -> anyhow::Result<()> {
-    #[cfg(target_os = "android")]
-    compile_error!("Android builds must call android_main instead of run()");
     run_ui()
 }
 
@@ -581,9 +579,12 @@ pub fn run_ui() -> anyhow::Result<()> {
                         format!("{}\n\n{}", note.title, note.body)
                     };
                     drop(s);
+                    #[cfg(not(target_os = "android"))]
                     if let Ok(mut cb) = arboard::Clipboard::new() {
                         let _ = cb.set_text(text);
                     }
+                    #[cfg(target_os = "android")]
+                    let _ = text;
                     toast(&ui2, "Copied to clipboard");
                 }
             }

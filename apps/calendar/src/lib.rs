@@ -933,8 +933,6 @@ fn current_days(state: &Rc<RefCell<AppState>>) -> Vec<NaiveDate> {
 // ---------- entry point ----------
 
 pub fn run() -> anyhow::Result<()> {
-    #[cfg(target_os = "android")]
-    compile_error!("Android builds must call android_main instead of run()");
     run_ui()
 }
 

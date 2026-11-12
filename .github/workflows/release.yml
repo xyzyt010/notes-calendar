@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify tag matches Cargo.toml version
@@ -32,7 +30,6 @@ jobs:
             exit 1
           fi
       - name: Create release draft
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
@@ -95,7 +92,7 @@ jobs:
             arch: amd64
             bin_ext: ""
             mac_arch: x86_64
-          # --- Android arm64 APK ---
+          # --- Android (unsigned debug APK, arm64) ---
           - display: android-aarch64
             os: ubuntu-24.04
             target: aarch64-linux-android
@@ -110,6 +107,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libudev-dev libinput-dev libgbm-dev libfontconfig-dev libseat-dev libwayland-dev libgl1-mesa-dev libglx-dev
+
+      - name: Install Android SDK/NDK
+        if: matrix.use_android
+        uses: android-actions/setup-android@v3
 
       - name: Install cross
         if: matrix.use_cross
@@ -149,21 +150,23 @@ jobs:
             cp "$bin" "dist/${app}-${{ github.ref_name }}-${{ matrix.display }}${{ matrix.bin_ext }}"
           done
 
-      # macOS universal2 combine step runs here for the darwin target
-      - name: Build Android APK (Notes + Calendar)
+      - name: Build Android APKs (debug, unsigned)
         if: matrix.use_android
         shell: bash
         env:
           ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          ANDROID_NDK: ${{ env.ANDROID_NDK_LATEST_HOME }}
           RUSTFLAGS: "-C link-arg=-Wl,-z,defs"
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           set -e
-          mkdir -p dist
-          cargo apk2 build --release --locked --target ${{ matrix.target }} -p notes --lib
-          cargo apk2 build --release --locked --target ${{ matrix.target }} -p calendar --lib
-          cp target/${{ matrix.target }}/release/*.apk dist/ 2>/dev/null || true
-          ls dist/
+          mkdir -p dist/apks
+          for app in notes calendar; do
+            cargo apk2 build --locked --target ${{ matrix.target }} -p $app
+          done
+          find target/debug/apk -name '*.apk' -type f -exec cp {} dist/apks/ \;
+          find target/release/apk -name '*.apk' -type f -exec cp {} dist/apks/ \;
+          ls -la dist/apks
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -188,8 +191,8 @@ jobs:
       - name: Collect checksums
         run: |
           cd dist
-          sha256sum * > SHA256SUMS || true
-          cat SHA256SUMS
+          find . -type f -exec sha256sum {} \; > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
         with:
@@ -197,5 +200,5 @@ jobs:
       - name: Upload release files
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/**/*
           fail_on_unmatched_files: false
