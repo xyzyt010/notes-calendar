@@ -202,4 +202,78 @@ mod tests {
         delete_event(&conn, ev.id).unwrap();
         assert!(get_event(&conn, ev.id).unwrap().is_none());
     }
+
+    #[test]
+    fn range_overlap_semantics() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let t0 = DateTime::parse_from_rfc3339("2026-11-12T09:00:00Z").unwrap().with_timezone(&Utc);
+        let t1 = t0 + chrono::Duration::hours(1);
+        let t2 = t0 + chrono::Duration::hours(2);
+
+        // event fully inside window
+        let a = crate::model::Event::new("inside", t0, t1);
+        create_event(&conn, &a).unwrap();
+        // event ending exactly when window starts — does NOT overlap
+        let b = crate::model::Event::new("before", t0 - chrono::Duration::hours(2), t0);
+        create_event(&conn, &b).unwrap();
+        // event starting exactly when window ends — does NOT overlap
+        let c = crate::model::Event::new("after", t1, t2);
+        create_event(&conn, &c).unwrap();
+        // event spanning the whole window — DOES overlap
+        let d = crate::model::Event::new("span", t0 - chrono::Duration::hours(3), t1 + chrono::Duration::hours(3));
+        create_event(&conn, &d).unwrap();
+
+        let got = events_in_range(&conn, t0, t1).unwrap();
+        let titles: Vec<&str> = got.iter().map(|e| e.title.as_str()).collect();
+        assert!(titles.contains(&"inside"));
+        assert!(titles.contains(&"span"));
+        assert!(!titles.contains(&"before"));
+        assert!(!titles.contains(&"after"));
+    }
+
+    #[test]
+    fn update_event_persists_changes() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let start = Utc::now();
+        let ev = crate::model::Event::new("Original", start, start + chrono::Duration::hours(1));
+        create_event(&conn, &ev).unwrap();
+
+        let mut fetched = get_event(&conn, ev.id).unwrap().unwrap();
+        fetched.title = "Renamed".into();
+        fetched.location = Some("Room 4".into());
+        update_event(&conn, &fetched).unwrap();
+
+        let got = get_event(&conn, ev.id).unwrap().unwrap();
+        assert_eq!(got.title, "Renamed");
+        assert_eq!(got.location.as_deref(), Some("Room 4"));
+    }
+
+    #[test]
+    fn calendar_visibility_toggle() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let cal = Calendar::new("Home", "#F28B82");
+        create_calendar(&conn, &cal).unwrap();
+        assert!(list_calendars(&conn).unwrap()[0].visible);
+        set_calendar_visible(&conn, cal.id, false).unwrap();
+        assert!(!list_calendars(&conn).unwrap()[0].visible);
+        set_calendar_visible(&conn, cal.id, true).unwrap();
+        assert!(list_calendars(&conn).unwrap()[0].visible);
+    }
+
+    #[test]
+    fn list_events_orders_by_start() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let base = DateTime::parse_from_rfc3339("2026-11-12T09:00:00Z").unwrap().with_timezone(&Utc);
+        let late = crate::model::Event::new("late", base + chrono::Duration::hours(5), base + chrono::Duration::hours(6));
+        let early = crate::model::Event::new("early", base, base + chrono::Duration::hours(1));
+        create_event(&conn, &late).unwrap();
+        create_event(&conn, &early).unwrap();
+        let events = list_events(&conn).unwrap();
+        let titles: Vec<&str> = events.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, vec!["early", "late"]);
+    }
 }

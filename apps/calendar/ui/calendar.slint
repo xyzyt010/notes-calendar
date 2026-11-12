@@ -375,7 +375,7 @@ export component MainWindow inherits Window {
                                         }
                                         Rectangle { width: 8px; height: 8px; border-radius: 4px; background: cal.color; y: 12px; }
                                         Text { text: cal.name; font-size: 12.5px; color: cal.visible ? Theme.text : Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
-                                        Text { text: cal.count; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; padding-right: 6px; }
+                                        Text { text: cal.count; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
                                     }
                                 }
 
@@ -409,22 +409,26 @@ export component MainWindow inherits Window {
                                     }
                                 }
                             if root.upcoming.length == 0:
-                                Text {
-                                    text: "Nothing upcoming yet.";
-                                    font-size: 11.5px;
-                                    color: Theme.text-faint;
+                                HorizontalLayout {
                                     padding-left: 6px;
                                     padding-top: 2px;
+                                    Text {
+                                        text: "Nothing upcoming yet.";
+                                        font-size: 11.5px;
+                                        color: Theme.text-faint;
+                                    }
                                 }
 
                             Rectangle {} // spring
                             Divider {}
-                            Text {
-                                text: "Local-first · Private";
-                                font-size: 10px;
-                                color: Theme.text-faint;
+                            HorizontalLayout {
                                 padding-left: 6px;
                                 padding-top: 6px;
+                                Text {
+                                    text: "Local-first · Private";
+                                    font-size: 10px;
+                                    color: Theme.text-faint;
+                                }
                             }
                         }
                     }

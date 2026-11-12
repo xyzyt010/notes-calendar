@@ -304,4 +304,130 @@ mod tests {
         delete_note_hard(&conn, n.id).unwrap();
         assert!(get_note(&conn, n.id).unwrap().is_none());
     }
+
+    #[test]
+    fn pinned_notes_sort_first() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let a = Note::new("alpha", "first");
+        let mut b = Note::new("beta", "second");
+        create_note(&conn, &a).unwrap();
+        create_note(&conn, &b).unwrap();
+        b.pinned = true;
+        update_note(&conn, &b).unwrap();
+        let listed = list_notes(&conn, &ListFilter::default()).unwrap();
+        assert_eq!(listed[0].title, "beta");
+        assert_eq!(listed[1].title, "alpha");
+    }
+
+    #[test]
+    fn trashed_and_archived_are_split_from_default_list() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let mut keep = Note::new("keep", "visible");
+        let mut arch = Note::new("arch", "archived");
+        let mut trash = Note::new("trash", "trashed");
+        create_note(&conn, &keep).unwrap();
+        create_note(&conn, &arch).unwrap();
+        create_note(&conn, &trash).unwrap();
+        arch.archived = true;
+        trash.trashed = true;
+        update_note(&conn, &arch).unwrap();
+        update_note(&conn, &trash).unwrap();
+
+        let default_list = list_notes(&conn, &ListFilter::default()).unwrap();
+        assert_eq!(default_list.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(), vec!["keep"]);
+
+        let archived = list_notes(&conn, &ListFilter { archived: true, ..Default::default() }).unwrap();
+        assert_eq!(archived.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(), vec!["arch"]);
+
+        let trashed = list_notes(&conn, &ListFilter { trashed: true, ..Default::default() }).unwrap();
+        assert_eq!(trashed.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(), vec!["trash"]);
+
+        // keep var to avoid warnings; silence explicitly
+        let _ = &mut keep;
+    }
+
+    #[test]
+    fn tag_filter_and_all_tags_counts() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let mut n1 = Note::new("one", "body");
+        n1.tags = vec!["rust".into(), "sqlite".into()];
+        let mut n2 = Note::new("two", "body");
+        n2.tags = vec!["rust".into()];
+        create_note(&conn, &n1).unwrap();
+        create_note(&conn, &n2).unwrap();
+
+        let rust = list_notes(&conn, &ListFilter { tag: Some("rust"), ..Default::default() }).unwrap();
+        assert_eq!(rust.len(), 2);
+        let sqlite = list_notes(&conn, &ListFilter { tag: Some("sqlite"), ..Default::default() }).unwrap();
+        assert_eq!(sqlite.len(), 1);
+        assert_eq!(sqlite[0].title, "one");
+
+        let tags = all_tags(&conn).unwrap();
+        assert_eq!(tags.iter().find(|(t, _)| t == "rust").unwrap().1, 2);
+        assert_eq!(tags.iter().find(|(t, _)| t == "sqlite").unwrap().1, 1);
+    }
+
+    #[test]
+    fn fts_query_sanitizes_injection_like_input() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        // These must not error even though they contain FTS5 special syntax
+        let payloads = [
+            "c++ rust",
+            "hello\" OR 1=1 --",
+            "drop table notes",
+            "( ) : * ^",
+            "   ",
+            "rust_",
+        ];
+        for p in payloads {
+            let _ = list_notes(&conn, &ListFilter { query: Some(p), ..Default::default() }).unwrap();
+        }
+    }
+
+    #[test]
+    fn favorites_only_filter() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let mut fav = Note::new("fav", "starred");
+        fav.favorite = true;
+        let plain = Note::new("plain", "ordinary");
+        create_note(&conn, &fav).unwrap();
+        create_note(&conn, &plain).unwrap();
+        let favs = list_notes(&conn, &ListFilter { favorites_only: true, ..Default::default() }).unwrap();
+        assert_eq!(favs.len(), 1);
+        assert_eq!(favs[0].title, "fav");
+    }
+
+    #[test]
+    fn folders_crud_and_filter_by_folder() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let folder = Folder::new("Work");
+        create_folder(&conn, &folder).unwrap();
+        let mut in_folder = Note::new("work note", "body");
+        in_folder.folder_id = Some(folder.id);
+        let outside = Note::new("outside", "body");
+        create_note(&conn, &in_folder).unwrap();
+        create_note(&conn, &outside).unwrap();
+
+        let folders = list_folders(&conn).unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].name, "Work");
+
+        let listed = list_notes(&conn, &ListFilter { folder_id: Some(folder.id), ..Default::default() }).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "work note");
+
+        rename_folder(&conn, folder.id, "Work 2").unwrap();
+        assert_eq!(list_folders(&conn).unwrap()[0].name, "Work 2");
+        delete_folder(&conn, folder.id).unwrap();
+        assert!(list_folders(&conn).unwrap().is_empty());
+        // Deleting a folder unsets folder_id on notes instead of deleting them
+        let n = get_note(&conn, in_folder.id).unwrap().unwrap();
+        assert_eq!(n.folder_id, None);
+    }
 }

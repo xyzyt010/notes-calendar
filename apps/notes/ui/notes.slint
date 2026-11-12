@@ -350,15 +350,17 @@ export component MainWindow inherits Window {
 
                                 Rectangle {} // spring
                                 Divider {}
-                                Text {
-                                    text: "Everything is stored locally on this device.";
-                                    font-size: 11px;
-                                    color: Theme.text-faint;
-                                    wrap: word-wrap;
+                                HorizontalLayout {
                                     padding-left: 10px;
                                     padding-right: 10px;
                                     padding-top: 8px;
                                     padding-bottom: 4px;
+                                    Text {
+                                        text: "Everything is stored locally on this device.";
+                                        font-size: 11px;
+                                        color: Theme.text-faint;
+                                        wrap: word-wrap;
+                                    }
                                 }
                             }
                         }
@@ -532,7 +534,10 @@ export component MainWindow inherits Window {
                             padding: 22px;
                             spacing: 10px;
                             Text { text: "Settings"; font-size: 17px; font-weight: 600; color: Theme.text; }
-                            Text { text: "Appearance"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; padding-top: 4px; }
+                            HorizontalLayout {
+                                padding-top: 4px;
+                                Text { text: "Appearance"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
+                            }
                             HorizontalLayout {
                                 spacing: 10px;
                                 // Dark option
@@ -567,7 +572,10 @@ export component MainWindow inherits Window {
                                     }
                                 }
                             }
-                            Text { text: "About"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; padding-top: 4px; }
+                            HorizontalLayout {
+                                padding-top: 4px;
+                                Text { text: "About"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
+                            }
                             HorizontalLayout {
                                 spacing: 10px;
                                 VerticalLayout { alignment: center; IconGhost { stroke-color: Theme.accent; preferred-width: 30px; preferred-height: 30px; } }

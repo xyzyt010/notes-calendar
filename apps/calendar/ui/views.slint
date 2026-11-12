@@ -36,7 +36,7 @@ export component TimelineView inherits Rectangle {
                 padding-bottom: 5px;
                 spacing: 6px;
 
-                Text { text: "ALL DAY"; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; padding-right: 4px; }
+                Text { text: "ALL DAY"; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
                 for chipItem in root.all-day:
                     chipTouch := TouchArea {
                         width: chipText.preferred-width + 34px;
@@ -305,12 +305,14 @@ export component MonthView inherits Rectangle {
                             }
 
                         if dayCell.more > 0:
-                            Text {
-                                text: "+" + dayCell.more + " more";
-                                font-size: 10px;
-                                font-weight: 600;
-                                color: Theme.text-dim;
+                            HorizontalLayout {
                                 padding-left: 4px;
+                                Text {
+                                    text: "+" + dayCell.more + " more";
+                                    font-size: 10px;
+                                    font-weight: 600;
+                                    color: Theme.text-dim;
+                                }
                             }
                     }
                 }

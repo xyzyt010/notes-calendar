@@ -33,7 +33,6 @@ const REMINDER_OPTIONS: [(&str, ReminderKind); 7] = [
 
 struct AppState {
     db: rusqlite::Connection,
-    data_dir: PathBuf,
     config_path: PathBuf,
     dark: bool,
     view: i32,
@@ -113,18 +112,6 @@ fn time_label(dt: DateTime<Utc>) -> String {
     }
 }
 
-fn time_label_short(dt: DateTime<Utc>) -> String {
-    let l = dt.with_timezone(&Local);
-    l.format("%I:%M %p").to_string().trim_start_matches('0').to_string()
-}
-
-fn time_range_label(start: DateTime<Utc>, end: DateTime<Utc>, all_day: bool) -> String {
-    if all_day {
-        return "All day".to_string();
-    }
-    format!("{} – {}", time_label_short(start), time_label_short(end))
-}
-
 fn minutes_since_midnight(dt: DateTime<Utc>) -> i64 {
     let l = dt.with_timezone(&Local);
     (l.hour() * 60 + l.minute()) as i64
@@ -150,7 +137,7 @@ fn occurrences(ev: &Event, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<DateTi
                 if t + duration > from {
                     out.push(t);
                 }
-                t = t + Duration::days(1);
+                t += Duration::days(1);
             }
         }
         Some(Recurrence::Weekdays) => {
@@ -160,7 +147,7 @@ fn occurrences(ev: &Event, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<DateTi
                 if wd < 5 && t + duration > from {
                     out.push(t);
                 }
-                t = t + Duration::days(1);
+                t += Duration::days(1);
             }
         }
         Some(Recurrence::Weekly) | Some(Recurrence::EveryNWeeks(_)) | Some(Recurrence::Custom) => {
@@ -173,7 +160,7 @@ fn occurrences(ev: &Event, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<DateTi
                 if t + duration > from {
                     out.push(t);
                 }
-                t = t + Duration::weeks(step);
+                t += Duration::weeks(step);
             }
         }
         Some(Recurrence::Monthly) => {
@@ -284,7 +271,7 @@ fn layout_day(events: Vec<(Uuid, DateTime<Utc>, DateTime<Utc>)>) -> Vec<(Uuid, f
 }
 
 fn emit_cluster(
-    sorted: &Vec<(Uuid, DateTime<Utc>, DateTime<Utc>)>,
+    sorted: &[(Uuid, DateTime<Utc>, DateTime<Utc>)],
     cluster: &[usize],
     out: &mut Vec<(Uuid, f32, f32, f32, f32)>,
 ) {
@@ -358,6 +345,9 @@ struct DayContent {
     all_day: Vec<MonthChip>,
 }
 
+/// Day → timeline-event columns map, used by the day/week views.
+type TimedEventMap = BTreeMap<usize, Vec<(Uuid, DateTime<Utc>, DateTime<Utc>, Event)>>;
+
 fn build_day_columns(
     events: &[Event],
     visible: &std::collections::HashSet<Uuid>,
@@ -367,7 +357,7 @@ fn build_day_columns(
     let range_end = local_midnight(*days.last().unwrap()) + Duration::days(1);
     let occs = occurrences_in_range(events, visible, range_start, range_end);
 
-    let mut timed: BTreeMap<usize, Vec<(Uuid, DateTime<Utc>, DateTime<Utc>, Event)>> = BTreeMap::new();
+    let mut timed: TimedEventMap = BTreeMap::new();
     let mut all_day: Vec<MonthChip> = Vec::new();
     for (ev, occ) in occs {
         let occ_date = local_date(occ);
@@ -800,7 +790,6 @@ fn open_event_dialog(
     event: Option<Event>,
     slot: Option<(NaiveDate, i64)>,
 ) {
-    let now = Local::now();
     let (start, end) = match event.as_ref() {
         Some(ev) => (ev.start, ev.end),
         None => {
@@ -808,7 +797,7 @@ fn open_event_dialog(
                 let n = Local::now();
                 let d = n.date_naive();
                 let minutes = if n.hour() < 20 {
-                    ((n.hour() * 60 + n.minute() + 29) / 30) as i64 * 30
+                    (n.hour() * 60 + n.minute()).div_ceil(30) as i64 * 30
                 } else {
                     9 * 60
                 };
@@ -945,7 +934,6 @@ pub fn run_ui() -> anyhow::Result<()> {
     let cfg = load_config(&config_path);
     let mut state = AppState {
         db: open_calendar_db(&dir.join("calendar.db"))?,
-        data_dir: dir,
         config_path,
         dark: cfg.get("dark").and_then(|v| v.as_bool()).unwrap_or(true),
         view: 2,

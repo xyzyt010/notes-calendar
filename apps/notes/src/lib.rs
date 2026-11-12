@@ -19,7 +19,6 @@ slint::include_modules!();
 
 struct AppState {
     db: rusqlite::Connection,
-    data_dir: PathBuf,
     config_path: PathBuf,
     dark: bool,
     seeded: bool,
@@ -77,10 +76,6 @@ fn edited_label(dt: DateTime<chrono::Utc>) -> String {
 
 fn word_count(text: &str) -> i32 {
     text.split_whitespace().count() as i32
-}
-
-fn preview_of(body: &str) -> String {
-    ycore::model::strip_markdown(body).chars().take(220).collect()
 }
 
 fn note_to_data(s: &NoteSummary) -> NoteData {
@@ -192,7 +187,7 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     ui.set_tags(ModelRc::new(VecModel::from(tag_rows)));
 }
 
-fn apply_to_editor(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note: &ycore::model::Note) {
+fn apply_to_editor(ui: &MainWindow, note: &ycore::model::Note) {
     ui.set_editor_title(note.title.clone().into());
     ui.set_editor_body(note.body.clone().into());
     let tags: Vec<SharedString> = note.tags.iter().map(|t| shared(t.clone())).collect();
@@ -210,13 +205,10 @@ fn apply_to_editor(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note: &ycore:
 fn select_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid) {
     flush_note(state, ui);
     let s = state.borrow();
-    match notes_store::get_note(&s.db, id) {
-        Ok(Some(note)) => {
-            drop(s);
-            state.borrow_mut().current_id = Some(id);
-            apply_to_editor(state, ui, &note);
-        }
-        _ => {}
+    if let Ok(Some(note)) = notes_store::get_note(&s.db, id) {
+        drop(s);
+        state.borrow_mut().current_id = Some(id);
+        apply_to_editor(ui, &note);
     }
 }
 
@@ -233,11 +225,6 @@ fn flush_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
             let _ = notes_store::update_note(&s.db, &note);
         }
     }
-}
-
-fn flush_and_refresh(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
-    flush_note(state, ui);
-    refresh_list(state, ui);
 }
 
 fn show_toast_and_refresh(state: &Rc<RefCell<AppState>>, ui: &MainWindow, msg: &str) {
@@ -266,7 +253,6 @@ pub fn run_ui() -> anyhow::Result<()> {
     let cfg = load_config(&config_path);
     let mut state = AppState {
         db: open_notes_db(&dir.join("notes.db"))?,
-        data_dir: dir,
         config_path,
         dark: cfg.get("dark").and_then(|v| v.as_bool()).unwrap_or(true),
         seeded: cfg.get("seeded").and_then(|v| v.as_bool()).unwrap_or(false),
@@ -793,7 +779,6 @@ pub fn run_ui() -> anyhow::Result<()> {
 
     {
         let ui2 = ui.clone_strong();
-        let st = state.clone();
         ui.on_window_resized(move |width| {
             let w = width;
             let compact = w < 880.0;
@@ -810,8 +795,7 @@ pub fn run_ui() -> anyhow::Result<()> {
             // Give the window a size that actually fits this screen (handles high-DPI
             // screens where slint's logical units map to fewer physical pixels).
             ui2.window().set_size(slint::LogicalSize::new(880.0, 600.0));
-            let sz = ui2.window().size();
-                });
+        });
     }
 
 

@@ -5,7 +5,7 @@
 #[cfg(target_os = "windows")]
 pub fn screen_size_logical() -> Option<(f32, f32)> {
     #[repr(C)]
-    struct POINT {
+    struct Point {
         x: i32,
         y: i32,
     }
@@ -13,7 +13,7 @@ pub fn screen_size_logical() -> Option<(f32, f32)> {
     extern "system" {
         fn GetSystemMetrics(index: i32) -> i32;
         fn GetDpiForSystem() -> u32;
-        fn MonitorFromPoint(pt: POINT, flags: u32) -> isize;
+        fn MonitorFromPoint(pt: Point, flags: u32) -> isize;
     }
     #[link(name = "shcore")]
     extern "system" {
@@ -26,7 +26,7 @@ pub fn screen_size_logical() -> Option<(f32, f32)> {
 
     let w = unsafe { GetSystemMetrics(SM_CXSCREEN) } as f32;
     let h = unsafe { GetSystemMetrics(SM_CYSCREEN) } as f32;
-    let hmon = unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
+    let hmon = unsafe { MonitorFromPoint(Point { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
     let mut dx: u32 = 96;
     let mut dy: u32 = 96;
     if unsafe { GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy) } >= 0 {
