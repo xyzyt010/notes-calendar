@@ -62,17 +62,12 @@ jobs:
             os: windows-11-arm
             target: aarch64-pc-windows-msvc
             bin_ext: .exe
-          # --- macOS (universal2 via lipo) ---
+          # --- macOS (arm64 M1+ only; Intel retired) ---
           - display: macos-aarch64
             os: macos-26
             target: aarch64-apple-darwin
             bin_ext: ""
             mac_arch: arm64
-          - display: macos-x86_64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            bin_ext: ""
-            mac_arch: x86_64
           # --- Android (debug APK, arm64; signed in user's CI secrets when configured) ---
           - display: android-aarch64
             os: ubuntu-24.04
@@ -154,41 +149,9 @@ jobs:
           name: pkg-${{ matrix.display }}
           path: dist/
 
-  lipo-macos:
-    name: macOS universal2 (lipo)
-    needs: build
-    runs-on: macos-26
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: pkg-macos-aarch64
-          path: dist1
-      - uses: actions/download-artifact@v4
-        with:
-          name: pkg-macos-x86_64
-          path: dist2
-      - name: Lipo into universal2 binaries
-        shell: bash
-        run: |
-          set -e
-          mkdir -p dist
-          TAG="${{ github.ref_name }}"
-          for app in notes calendar; do
-            A="dist1/${app}-${TAG}-macos-aarch64"
-            B="dist2/${app}-${TAG}-macos-x86_64"
-            echo "lipo $A + $B"
-            lipo -create "$A" "$B" -output "dist/${app}-${TAG}-macos-universal2"
-            file "dist/${app}-${TAG}-macos-universal2" || true
-          done
-      - name: Upload universal2 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: pkg-macos-universal2
-          path: dist/
-
   publish:
     name: Publish release
-    needs: [create-release, build, lipo-macos]
+    needs: [create-release, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
