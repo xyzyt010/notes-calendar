@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.78"
 license = "MIT"
@@ -38,8 +38,8 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "services"] }
 
 [profile.release]
-lto = "fat"
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 panic = "abort"
 opt-level = 3
 strip = "symbols"

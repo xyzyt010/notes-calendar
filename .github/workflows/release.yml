@@ -44,59 +44,39 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # --- Linux (widest glibc baseline) ---
+          # --- Linux gnu (Ubuntu 22.04 baseline: glibc >= 2.35) ---
           - display: linux-x86_64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            arch: amd64
             bin_ext: ""
           - display: linux-aarch64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            arch: arm64
-            bin_ext: ""
-          # --- Linux musl (static, max compatibility) ---
-          - display: linux-x86_64-musl
-            os: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
-            arch: amd64
-            use_cross: true
-            bin_ext: ""
-          - display: linux-aarch64-musl
-            os: ubuntu-24.04
-            target: aarch64-unknown-linux-musl
-            arch: arm64
-            use_cross: true
             bin_ext: ""
           # --- Windows ---
           - display: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            arch: amd64
             bin_ext: .exe
           - display: windows-arm64
             os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            arch: arm64
             bin_ext: .exe
           # --- macOS (universal2 via lipo) ---
           - display: macos-aarch64
             os: macos-26
             target: aarch64-apple-darwin
-            arch: arm64
             bin_ext: ""
             mac_arch: arm64
           - display: macos-x86_64
             os: macos-15-intel
             target: x86_64-apple-darwin
-            arch: amd64
             bin_ext: ""
             mac_arch: x86_64
-          # --- Android (unsigned debug APK, arm64) ---
+          # --- Android (debug APK, arm64; signed in user's CI secrets when configured) ---
           - display: android-aarch64
             os: ubuntu-24.04
             target: aarch64-linux-android
-            arch: arm64
             bin_ext: ""
             use_android: true
     steps:
@@ -107,16 +87,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libudev-dev libinput-dev libgbm-dev libfontconfig-dev libseat-dev libwayland-dev libgl1-mesa-dev libglx-dev
-
-      - name: Install Android SDK/NDK
-        if: matrix.use_android
-        uses: android-actions/setup-android@v3
-
-      - name: Install cross
-        if: matrix.use_cross
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cross@0.2.5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -137,12 +107,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
-            BUILD=cross
-          else
-            BUILD=cargo
-          fi
-          $BUILD build --release --locked --target ${{ matrix.target }} --workspace
+          cargo build --release --locked --target ${{ matrix.target }} --workspace
           mkdir -p dist
           for app in notes calendar; do
             bin="target/${{ matrix.target }}/release/${app}${{ matrix.bin_ext }}"
@@ -154,12 +119,16 @@ jobs:
         if: matrix.use_android
         shell: bash
         env:
+          # ubuntu-24.04 runners ship the Android SDK/NDK preinstalled
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
           ANDROID_NDK: ${{ env.ANDROID_NDK_LATEST_HOME }}
-          RUSTFLAGS: "-C link-arg=-Wl,-z,defs"
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           set -e
+          echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME" || true
+          ls "$ANDROID_HOME/ndk" || true
           mkdir -p dist/apks
           for app in notes calendar; do
             cargo apk2 build --locked --target ${{ matrix.target }} -p $app
