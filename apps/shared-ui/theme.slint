@@ -14,27 +14,32 @@ export global Theme {
     // Master switch. Toggled from settings; everything derives from it.
     in-out property <bool> dark: true;
 
-    // ---- Backgrounds ----
-    out property <color> bg:            dark ? #131314 : #f7f8f9;
-    out property <color> surface:       dark ? #1b1c1d : #ffffff;
-    out property <color> surface-2:     dark ? #232425 : #eceef0;  // pill / chip / hover base
-    out property <color> surface-3:     dark ? #2b2c2e : #e1e3e6;  // stronger hover / pressed
-    out property <color> border:        dark ? #2b2c2e : #e3e4e6;
-    out property <color> border-strong: dark ? #3c3d40 : #cbced2;
+    // ---- Backgrounds (notes.yellod.dpdns.org dark / light) ----
+    out property <color> bg:            dark ? #121212 : #FFFFFF;
+    out property <color> surface:       dark ? #1B1B1B : #F1F3F4;  // top bar / drawer
+    out property <color> surface-2:     dark ? #2A2B2D : #F1F3F4;  // search pill / chips / hover base
+    out property <color> surface-3:     dark ? #2A2B2D : #E1E3E6;  // stronger hover / pressed
+    out property <color> card-bg:       dark ? #1F1F1F : #FFFFFF;  // cards & composer
+    out property <color> border:        dark ? #5F6368 : #DDDDDD;  // Keep card borders (light grey stroke)
+    out property <color> border-strong: dark ? #5F6368 : #DDDDDD;
+    out property <color> divider:       dark ? #2C2D2F : #E8EAED;  // hairline separators
+    out property <color> icon-hover-bg: dark ? rgba(255,255,255,0.10) : rgba(95,99,104,0.08);
+    out property <color> drawer-bg:     dark ? #1B1B1B : #FFFFFF;
+    out property <color> drawer-active: dark ? #47484C : #E8EAED;
 
-    out property <color> scrim:         #00000099;                  // modal overlay
+    out property <color> scrim:         dark ? #00000099 : rgba(32,33,36,0.4);   // modal overlay
 
     // ---- Text ----
     out property <color> text:          dark ? #e8eaed : #1f2022;
     out property <color> text-dim:      dark ? #9aa0a6 : #5f6368;
     out property <color> text-faint:    dark ? #6f747b : #a3a7ad;
 
-    // ---- Accent (Google dark-style blue) ----
-    out property <color> accent:        dark ? #aecbfa : #0b57d0;
-    out property <color> on-accent:     dark ? #0b326e : #ffffff;
-    out property <color> accent-soft:   dark ? #aecbfa29 : #0b57d01f; // ~16% / ~12%
+    // ---- Accent (Keep yellow / dark & light) ----
+    out property <color> accent:        dark ? #FDD663 : #FDD663;
+    out property <color> on-accent:     dark ? #202124 : #202124;
+    out property <color> accent-soft:   dark ? #FDD66329 : #FDD6632E; // ~16% / ~17%
 
-    out property <color> danger:        dark ? #f2b8b5 : #b3261e;
+    out property <color> danger:        dark ? #F28B82 : #D93025;   // Keep danger
     out property <color> danger-soft:   dark ? #f2b8b520 : #b3261a12;
 
     out property <color> success:       dark ? #9ad3a8 : #146c2e;

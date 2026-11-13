@@ -542,8 +542,11 @@ function renderDayView() {
   const col = grid.querySelector('.time-col');
   const timed = visibleEvents().filter(e => !e.all_day && eventsIntersect(e, cur));
   const hourHeight = 52;
+  const dayStart = startOfDay(cur), dayEnd = addDays(dayStart, 1);
   for (const e of timed) {
-    const s = new Date(e.start), en = new Date(e.end);
+    const s0 = new Date(e.start), e0 = new Date(e.end);
+    const s = s0 < dayStart ? dayStart : s0;
+    const en = e0 > dayEnd ? dayEnd : e0;
     const startMin = (s.getHours() * 60 + s.getMinutes());
     const durMin = Math.max(15, (en - s) / 60000);
     const top = (startMin / 60) * hourHeight;
@@ -636,8 +639,11 @@ function renderWeekView() {
     const d0 = days[i];
     const col = cols[i];
     const timed = visibleEvents().filter(e => !e.all_day && eventsIntersect(e, d0));
+    const dStart = startOfDay(d0), dEnd = addDays(dStart, 1);
     for (const e of timed) {
-      const s = new Date(e.start), en = new Date(e.end);
+      const s0 = new Date(e.start), e0 = new Date(e.end);
+      const s = s0 < dStart ? dStart : s0;
+      const en = e0 > dEnd ? dEnd : e0;
       const startMin = (s.getHours() * 60 + s.getMinutes());
       const durMin = Math.max(15, (en - s) / 60000);
       const top = (startMin / 60) * hourHeight;
