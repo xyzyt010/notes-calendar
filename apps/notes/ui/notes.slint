@@ -1,19 +1,27 @@
 // yellod Notes — main window.
-// Top bar (menu / logo / search / view toggle / new) → rail + (optional sidebar) + list + editor.
+// Top bar → rail → board/vault/graph → status bar; editor as a modal on desktop.
 
 import { Theme } from "../../shared-ui/theme.slint";
 import { AboutSlint } from "std-widgets.slint";
 import {
     IconGhost, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash,
     IconSettings, IconMoon, IconSun, IconLayoutGrid, IconList,
-    IconFileText, IconFolder, IconFolderPlus, IconTag,
+    IconFileText, IconFolder, IconFolderPlus, IconTag, IconPanelLeft, IconLink2, IconLock,
 } from "../../shared-ui/icons.slint";
 import {
     SearchBar, IconButton, RailButton, SidebarRow, Divider, ConfirmDialog,
     Toast, NoteData, FolderData, TagData, TextButton, EmptyState,
+    NoteImageData, ChecklistItemData, GraphNodeData, GraphLinkData, DoodleStrokeData,
 } from "../../shared-ui/components.slint";
 import { NoteListPanel } from "note-grid.slint";
 import { EditorPane } from "editor.slint";
+import { NewNoteComposer } from "composer.slint";
+import { VaultView } from "vault-view.slint";
+import { GraphView } from "graph-view.slint";
+import { UnlockOverlay } from "unlock.slint";
+import { SettingsView } from "settings.slint";
+import { MarkdownGuide } from "markdown-guide.slint";
+import { DoodleOverlay } from "doodle.slint";
 
 
 export component MainWindow inherits Window {
@@ -21,13 +29,25 @@ export component MainWindow inherits Window {
     icon: @image-url("../../../assets/app-icon.png");
     default-font-family: "Inter";
     background: Theme.bg;
-    preferred-width: 880px;
-    preferred-height: 560px;
+    preferred-width: 1040px;
+    preferred-height: 600px;
+    height: 600px;
 
     // ---------- Rust-facing state ----------
     in-out property <bool> dark: true;
+    in-out property <bool> neo: false;
     in-out property <[NoteData]> pinned-notes: [];
     in-out property <[NoteData]> notes: [];
+    in-out property <[NoteData]> pinned-col-0: [];
+    in-out property <[NoteData]> pinned-col-1: [];
+    in-out property <[NoteData]> pinned-col-2: [];
+    in-out property <[NoteData]> pinned-col-3: [];
+    in-out property <[NoteData]> pinned-col-4: [];
+    in-out property <[NoteData]> notes-col-0: [];
+    in-out property <[NoteData]> notes-col-1: [];
+    in-out property <[NoteData]> notes-col-2: [];
+    in-out property <[NoteData]> notes-col-3: [];
+    in-out property <[NoteData]> notes-col-4: [];
     in-out property <[FolderData]> folders: [];
     in-out property <[TagData]> tags: [];
     in-out property <string> selected-id: "";
@@ -35,7 +55,16 @@ export component MainWindow inherits Window {
     in-out property <string> active-folder: "";
     in-out property <string> active-tag: "";
     in-out property <string> search-text: "";
+    in-out property <int> search-focus-token: 0;
     in-out property <bool> list-view: false;
+    in-out property <int> layout-style: 0;   // 0 Keep · 1 Notion · 2 Obsidian · 3 Neomorph · 4 Graph
+    in-out property <int> density-setting: 1;
+    in-out property <bool> mobile-two: true;
+    in-out property <int> sort-setting: 0;
+    in-out property <bool> pinned-first: true;
+    in-out property <bool> md-cards: false;
+    in-out property <bool> show-dates: true;
+    in-out property <int> card-clamp: 5;
     in-out property <int> note-count: 0;
     in-out property <int> grid-cols: 4;
     in-out property <bool> sidebar-open: false;
@@ -58,11 +87,93 @@ export component MainWindow inherits Window {
     in-out property <bool> folder-menu-open: false;
     in-out property <bool> color-popover-open: false;
     in-out property <int> current-note-color-index: 0;
+    in-out property <[NoteImageData]> current-images: [];
+    in-out property <int> current-image-count: 0;
+    in-out property <[ChecklistItemData]> checklist-items: [];
+    in-out property <[string]> editor-links: [];
+    in property <styled-text> editor-markdown;
+    in-out property <int> editor-mode: 0;
+    in-out property <bool> editor-checklist-mode: false;
+    in-out property <bool> editor-find-open: false;
+    in-out property <string> editor-find-query: "";
+    in-out property <int> editor-find-count: 0;
+    in-out property <int> editor-find-index: 0;
+    in-out property <[string]> editor-suggestions: [];
+    in-out property <bool> editor-suggestions-visible: false;
 
-    // Chrome state
+    in-out property <int> find-selection-offset: 0;
+    in-out property <int> find-selection-length: 0;
+    in-out property <int> find-selection-token: 0;
+
+    // Composer state
+    in-out property <bool> composer-open: false;
+    in-out property <string> composer-title: "";
+    in-out property <string> composer-body: "";
+    in-out property <bool> composer-pinned: false;
+    in-out property <int> composer-color-index: 0;
+    in-out property <bool> composer-checklist-mode: false;
+    in-out property <bool> composer-preview-mode: false;
+    in-out property <[ChecklistItemData]> composer-checklist-items: [];
+    in property <styled-text> composer-preview-styled;
+    in-out property <[NoteImageData]> composer-pending-images: [];
+    in-out property <bool> composer-color-popover-open: false;
+
+    // Vault / unlock state
+    in-out property <bool> vault-enabled: false;
+    in-out property <bool> vault-unlocked: true;
+    in-out property <bool> vault-mismatch: false;
+    in-out property <int> vault-mode: 1;
+    in-out property <string> vault-password: "";
+    in-out property <string> vault-confirm: "";
+    in-out property <string> vault-error: "";
+    in-out property <bool> vault-show-password: false;
+
+    // Vault view state
+    in-out property <string> vault-filter: "";
+    in-out property <[NoteData]> vault-notes: [];
+    in-out property <string> vault-selected-id: "";
+    in-out property <bool> vault-has-note: false;
+    in-out property <string> vault-title: "";
+    in-out property <string> vault-meta: "";
+    in property <styled-text> vault-markdown;
+    in-out property <string> vault-source: "";
+    in-out property <bool> vault-source-mode: false;
+    in-out property <[string]> vault-links-out: [];
+    in-out property <[string]> vault-backlinks: [];
+    in-out property <bool> vault-pinned: false;
+
+    // Graph state
+    in-out property <[GraphNodeData]> graph-nodes: [];
+    in-out property <[GraphLinkData]> graph-links: [];
+    in-out property <bool> graph-has-selection: false;
+    in-out property <string> graph-selected-id: "";
+    in-out property <string> graph-selected-title: "";
+    in-out property <string> graph-selected-meta: "";
+    in property <styled-text> graph-selected-markdown;
+    in-out property <[string]> graph-selected-links: [];
+
+    // Doodle state
+    in-out property <bool> doodle-open: false;
+    in-out property <[DoodleStrokeData]> doodle-strokes: [];
+    in-out property <color> doodle-pen-color: #5dd8ff;
+    in-out property <length> doodle-pen-size: 5px;
+
+    // Settings / overlays
     in-out property <bool> show-settings: false;
+    in-out property <bool> show-markdown-guide: false;
+    in-out property <bool> timestamps-open: false;
+    in-out property <string> timestamp-created: "";
+    in-out property <string> timestamp-edited: "";
+    in-out property <[string]> timestamp-activity: [];
     in-out property <bool> show-delete-forever: false;
     in-out property <bool> show-empty-trash: false;
+    in-out property <bool> image-preview-open: false;
+    in-out property <string> image-preview-id: "";
+    in-out property <image> image-preview-image;
+    in-out property <string> image-preview-name: "";
+    in-out property <string> image-preview-size: "";
+    in-out property <string> settings-security-error: "";
+    in-out property <string> settings-stats: "";
     in-out property <string> toast-message: "";
     in-out property <bool> toast-visible: false;
 
@@ -78,12 +189,14 @@ export component MainWindow inherits Window {
     callback tag-selected(string);
     callback note-activated(string);
     callback pin-toggled(string);
+    callback manual-note-moved(string, int);
     callback archive-editor();
     callback trash-editor();
     callback restore-editor();
     callback delete-forever-confirmed();
     callback empty-trash-confirmed();
     callback copy-editor();
+    callback export-editor();
     callback editor-content-changed();
     callback tag-added(string);
     callback tag-removed(string);
@@ -95,11 +208,113 @@ export component MainWindow inherits Window {
     callback toggle-pin-editor();
     callback toggle-favorite-editor();
     callback back-to-list();
-    callback window-resized(length);
+    callback layout-selected(int);
+    callback vault-unlock();
+    callback vault-create-from-unlock();
+    callback vault-forgot();
+    callback lock-now();
+    callback create-vault(string, string);
+    callback change-password(string, string);
+    callback reset-password(string, string, bool);
+    callback composer-open-requested();
+    callback composer-close-requested();
+    callback composer-content-changed();
+    callback composer-toggle-pin();
+    callback composer-color-picked(int);
+    callback composer-image-requested();
+    callback composer-draw-requested();
+    callback composer-checklist-toggle();
+    callback composer-preview-toggle();
+    callback composer-checklist-add(string);
+    callback composer-checklist-toggle-item(int);
+    callback composer-checklist-edit-item(int, string);
+    callback composer-checklist-remove-item(int);
+    callback composer-remove-pending-image(string);
+    callback attach-images();
+    callback draw-editor();
+    callback image-preview(string);
+    callback image-delete(string);
+    callback image-download-preview();
+    callback close-image-preview();
+    callback checklist-toggle();
+    callback checklist-add(string);
+    callback checklist-toggle-item(int);
+    callback checklist-edit-item(int, string);
+    callback checklist-remove-item(int);
+    callback link-clicked(string);
+    callback find-changed();
+    callback find-next();
+    callback find-previous();
+    callback close-find();
+    callback suggestion-picked(string);
+    callback vault-filter-changed(string);
+    callback vault-note-selected(string);
+    callback vault-new-note();
+    callback vault-pin-toggled();
+    callback vault-edit-source();
+    callback vault-source-edited();
+    callback vault-open();
+    callback vault-title-edited(string);
+    callback graph-pointer-down(length, length, bool);
+    callback graph-pointer-move(length, length, bool);
+    callback graph-pointer-up(length, length, bool);
+    callback graph-wheel(length, bool);
+    callback graph-relabel();
+    callback graph-close-selection();
+    callback graph-open-note();
+    callback graph-unlink-all();
+    callback doodle-draw-down(length, length, bool);
+    callback doodle-draw-move(length, length, bool);
+    callback doodle-draw-up(length, length);
+    callback doodle-undo();
+    callback doodle-clear();
+    callback doodle-cancel();
+    callback doodle-save();
+    callback show-timestamps();
+    callback markdown-guide();
+    callback import-md();
+    callback export-all-md();
+    callback settings-density-selected(int);
+    callback settings-sort-selected(int);
+    callback settings-toggle-mobile-two();
+    callback settings-toggle-pinned-first();
+    callback settings-toggle-md-cards();
+    callback settings-toggle-show-dates();
+    callback settings-clamp-selected(int);
 
-    changed width => { root.window-resized(self.width); }
+    changed width => {
+        root.compact = self.width < 880px;
+        if root.density-setting == 0 {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+        } else if root.density-setting == 2 {
+            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+        } else {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 2 : self.width < 1650px ? 3 : 4;
+        }
+    }
+    changed density-setting => {
+        if root.density-setting == 0 {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+        } else if root.density-setting == 2 {
+            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+        } else {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 2 : self.width < 1650px ? 3 : 4;
+        }
+    }
+    changed mobile-two => {
+        if root.density-setting == 0 {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+        } else if root.density-setting == 2 {
+            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+        } else {
+            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 2 : self.width < 1650px ? 3 : 4;
+        }
+    }
+    changed grid-cols => { root.refresh-masonry(); }
     changed dark => { Theme.dark = root.dark; }
+    changed neo => { Theme.neo = root.neo; }
 
+    callback refresh-masonry();
 
     toastTimer := Timer {
         interval: 3.4s;
@@ -110,16 +325,23 @@ export component MainWindow inherits Window {
     focus-scope := FocusScope {
         init => { focus-scope.focus(); }
         key-pressed(event) => {
-            if event.modifiers.control && event.text == "n" {
-                root.new-note();
-                return accept;
-            }
+            if event.modifiers.control && event.text == "n" { root.new-note(); return accept; }
             if event.modifiers.control && event.text == "f" {
-                search.input-focus();
+                if root.has-note { root.editor-find-open = true; return accept; }
+                root.search-focus-token = root.search-focus-token + 1;
                 return accept;
             }
+            if event.modifiers.control && event.text == "z" && root.doodle-open { root.doodle-undo(); return accept; }
             if event.text == "\u{1b}" {
+                if root.doodle-open { root.doodle-cancel(); return accept; }
+                if root.show-settings { root.show-settings = false; return accept; }
+                if root.timestamps-open { root.timestamps-open = false; return accept; }
+                if root.show-markdown-guide { root.show-markdown-guide = false; return accept; }
+                if root.image-preview-open { root.close-image-preview(); return accept; }
+                if root.editor-find-open { root.close-find(); return accept; }
                 if root.folder-menu-open { root.folder-menu-open = false; return accept; }
+                if root.color-popover-open { root.color-popover-open = false; return accept; }
+                if root.composer-color-popover-open { root.composer-color-popover-open = false; return accept; }
                 if root.search-text != "" { root.search-changed(""); return accept; }
                 if root.compact && root.has-note { root.back-to-list(); return accept; }
                 return accept;
@@ -127,510 +349,631 @@ export component MainWindow inherits Window {
             reject
         }
 
-        app := Rectangle {
-            width: 100%;
-            height: 100%;
-            background: Theme.bg;
-
-            VerticalLayout {
-                // ============ TOP BAR ============
-                Rectangle {
-                    height: Theme.topbar-height;
-                    background: Theme.bg;
-                    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
-                    hamburgerBtn := IconButton {
-                        x: 10px;
-                        y: 11px;
-                        size: 42px;
-                        clicked => { root.toggle-sidebar(); }
-                        IconMenu { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
-                    }
-
-                    // Logo: ghost + wordmark (absolute, icons centered in sized slots)
-                    ghostLogoSlot := Rectangle {
-                        x: 64px;
-                        y: 17px;
-                        width: 30px;
-                        height: 30px;
-                        VerticalLayout {
-                            alignment: center;
-                            HorizontalLayout {
-                                alignment: center;
-                                IconGhost { preferred-width: 26px; preferred-height: 26px; stroke-color: Theme.accent; }
-                            }
-                        }
-                    }
-                    wordMark := Text {
-                        visible: root.width >= 560px;
-                        x: 104px;
-                        y: 0px;
-                        height: parent.height;
-                        vertical-alignment: center;
-                        text: "Notes";
-                        font-size: 21px;
-                        font-weight: 600;
-                        color: Theme.text;
-                    }
-
-                    // Search — fixed position/width (window width bindings are unreliable pre-layout)
-                    searchWrap := Rectangle {
-                        x: 210px;
-                        y: 10px;
-                        width: 560px;
-                        height: 44px;
-                        visible: root.width >= 760px;
-                        VerticalLayout {
-                            alignment: center;
-                            search := SearchBar {
-                                text <=> root.search-text;
-                                width: 100%;
-                                submitted => { root.search-changed(root.search-text); }
-                                cleared => { root.search-changed(""); }
-                            }
-                        }
-                    }
-
-                    viewToggleBtn := IconButton {
-                        x: 786px;
-                        y: 11px;
-                        size: 42px;
-                        clicked => { root.toggle-view-mode(); }
-                        if root.list-view:
-                            IconLayoutGrid { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
-                        if !root.list-view:
-                            IconList { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
-                    }
-
-                    // New note — accent filled circle
-                    newNoteBtn := Rectangle {
-                        x: 836px;
-                        y: 11px;
-                        width: 42px;
-                        height: 42px;
-                        border-radius: 21px;
-                        background: Theme.accent;
-                        newTouch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.new-note(); }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            HorizontalLayout { alignment: center; IconPlus { stroke-color: Theme.on-accent; preferred-width: 22px; preferred-height: 22px; } }
-                        }
-                    }
-                }
-
-                // ============ MAIN ROW ============
-                HorizontalLayout {
-                    spacing: 0px;
-
-                    // ---- Left icon rail ----
-                    Rectangle {
-                        width: Theme.rail-width;
-                        background: Theme.bg;
-
-                        VerticalLayout {
-                            padding-top: 12px;
-                            spacing: 4px;
-
-                            RailButton { label: "Notes"; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == ""; clicked => { root.view-selected(0); }
-                                IconFileText { stroke-color: (root.active-view == 0 && root.active-folder == "" && root.active-tag == "") ? Theme.accent : Theme.text-dim; preferred-width: 22px; preferred-height: 22px; } }
-                            RailButton { label: "Pinned"; selected: root.active-view == 1; clicked => { root.view-selected(1); }
-                                IconPin { stroke-color: root.active-view == 1 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
-                            RailButton { label: "Favorites"; selected: root.active-view == 2; clicked => { root.view-selected(2); }
-                                IconStar { stroke-color: root.active-view == 2 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
-                            RailButton { label: "Archive"; selected: root.active-view == 3; clicked => { root.view-selected(3); }
-                                IconArchive { stroke-color: root.active-view == 3 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
-                            RailButton { label: "Trash"; selected: root.active-view == 4; clicked => { root.view-selected(4); }
-                                IconTrash { stroke-color: root.active-view == 4 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
-
-                            Rectangle {} // spring
-
-                            Divider { width: 44px; x: 14px; }
-
-                            RailButton { label: Theme.dark ? "Light" : "Dark"; clicked => { root.toggle-theme(); }
-                                if Theme.dark:
-                                    IconSun { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
-                                if !Theme.dark:
-                                    IconMoon { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
-                            }
-                            RailButton { label: "Settings"; clicked => { root.show-settings = true; }
-                                IconSettings { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
-                        }
-                    }
-
-                    // ---- Folder sidebar ----
-                    if root.sidebar-open:
-                        Rectangle {
-                            width: Theme.sidebar-width;
-                            background: Theme.bg;
-
-                            VerticalLayout {
-                                padding: 12px;
-                                spacing: 2px;
-
-                                HorizontalLayout {
-                                    padding-left: 10px;
-                                    height: 32px;
-                                    Text { text: "FOLDERS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
-                                    IconButton { size: 27px; clicked => { root.new-folder(); }
-                                        IconFolderPlus { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
-                                }
-
-                                // New-folder inline input
-                                if root.new-folder-open:
-                                    folderInputRow := Rectangle {
-                                        height: 38px;
-                                        border-radius: Theme.r-md;
-                                        background: Theme.surface-2;
-                                        folderInput := TextInput {
-                                            x: 12px;
-                                            width: parent.width - 48px;
-                                            height: 100%;
-                                            single-line: true;
-                                            font-size: 13.5px;
-                                            color: Theme.text;
-                                            vertical-alignment: center;
-                                            text <=> root.new-folder-name;
-                                            selection-background-color: Theme.accent-soft;
-                                            key-pressed(event) => {
-                                                if event.text == "\n" {
-                                                    root.create-folder(self.text);
-                                                    return accept;
-                                                }
-                                                if event.text == "\u{1b}" {
-                                                    root.cancel-new-folder();
-                                                    return accept;
-                                                }
-                                                reject
-                                            }
-                                        }
-                                        if root.new-folder-name == "":
-                                            Text {
-                                                x: 12px;
-                                                height: 100%;
-                                                vertical-alignment: center;
-                                                text: "Folder name…";
-                                                font-size: 13px;
-                                                color: Theme.text-faint;
-                                            }
-                                        Text {
-                                            x: parent.width - 26px;
-                                            height: 100%;
-                                            vertical-alignment: center;
-                                            text: "⏎";
-                                            font-size: 14px;
-                                            color: Theme.text-faint;
-                                        }
-                                    }
-
-                                for folder[fi] in root.folders:
-                                    folderRow := SidebarRow {
-                                        label: folder.name;
-                                        meta: folder.meta;
-                                        selected: root.active-folder == folder.id;
-                                        show-delete: true;
-                                        clicked => { root.folder-selected(folder.id); }
-                                        delete => { root.delete-folder(folder.id); }
-                                        IconFolder { stroke-color: folderRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
-                                    }
-
-                                Rectangle { height: 14px; }
-
-                                HorizontalLayout {
-                                    padding-left: 10px;
-                                    height: 32px;
-                                    Text { text: "TAGS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; }
-                                }
-                                for tag[ti] in root.tags:
-                                    tagRow := SidebarRow {
-                                        label: "#  " + tag.name;
-                                        meta: tag.meta;
-                                        selected: root.active-tag == tag.name;
-                                        clicked => { root.tag-selected(tag.name); }
-                                        IconTag { stroke-color: tagRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 15px; preferred-height: 15px; }
-                                    }
-
-                                Rectangle {} // spring
-                                Divider {}
-                                HorizontalLayout {
-                                    padding-left: 10px;
-                                    padding-right: 10px;
-                                    padding-top: 8px;
-                                    padding-bottom: 4px;
-                                    Text {
-                                        text: "Everything is stored locally on this device.";
-                                        font-size: 11px;
-                                        color: Theme.text-faint;
-                                        wrap: word-wrap;
-                                    }
-                                }
-                            }
-                        }
-
-                    if root.sidebar-open:
-                        Rectangle { width: 1px; background: Theme.border; }
-
-                    // ============ CONTENT ============
-                    // Compact: list XOR editor. Desktop: list pane + editor pane.
-                    if root.compact && !root.has-note:
-                            NoteListPanel {
-                                horizontal-stretch: 1;
-                                pinned-notes: root.pinned-notes;
-                                notes: root.notes;
-                                list-view: root.list-view;
-                                selected-id: root.selected-id;
-                                view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES"))
-                                    : root.active-view == 1 ? "PINNED"
-                                    : root.active-view == 2 ? "FAVORITES"
-                                    : root.active-view == 3 ? "ARCHIVE"
-                                    : "TRASH";
-                                active-view: root.active-view;
-                                search-text: root.search-text;
-                                columns: 1;
-                                pinned-section: root.pinned-section;
-                                note-count: root.note-count;
-                                card-clicked(id) => { root.note-activated(id); }
-                                pin-toggled(id) => { root.pin-toggled(id); }
-                                ask-empty-trash => { root.show-empty-trash = true; }
-                            }
-                    if root.compact && root.has-note:
-                            EditorPane {
-                                horizontal-stretch: 1;
-                                compact: true;
-                                editor-title <=> root.editor-title;
-                                editor-body <=> root.editor-body;
-                                editor-tags <=> root.editor-tags;
-                                editor-pinned <=> root.editor-pinned;
-                                editor-favorite <=> root.editor-favorite;
-                                word-count <=> root.word-count;
-                                save-state <=> root.save-state;
-                                edited-label <=> root.edited-label;
-                                folder-menu-open <=> root.folder-menu-open;
-                                color-popover-open <=> root.color-popover-open;
-                                current-color-index <=> root.current-note-color-index;
-                                in-trash: root.active-view == 4;
-                                in-archive: root.active-view == 3;
-                                folders: root.folders;
-                                current-folder: root.selected-folder-of-editor;
-                                content-changed => { root.editor-content-changed(); }
-                                toggle-pin => { root.toggle-pin-editor(); }
-                                toggle-favorite => { root.toggle-favorite-editor(); }
-                                toggle-archive => { root.archive-editor(); }
-                                toggle-trash => { root.trash-editor(); }
-                                restore => { root.restore-editor(); }
-                                delete-forever => { root.show-delete-forever = true; }
-                                copy-note => { root.copy-editor(); }
-                                tag-added(text) => { root.tag-added(text); }
-                                tag-removed(text) => { root.tag-removed(text); }
-                                assign-folder(id) => { root.assign-folder(id); }
-                                color-picked(idx) => { root.color-picked(idx); }
-                                back => { root.back-to-list(); }
-                            }
-
-                    if !root.compact:
-                        NoteListPanel {
-                            width: 384px;
-                            pinned-notes: root.pinned-notes;
-                            notes: root.notes;
-                            list-view: root.list-view;
-                            selected-id: root.selected-id;
-                            view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES"))
-                                : root.active-view == 1 ? "PINNED"
-                                : root.active-view == 2 ? "FAVORITES"
-                                : root.active-view == 3 ? "ARCHIVE"
-                                : "TRASH";
-                            active-view: root.active-view;
-                            search-text: root.search-text;
-                            columns: root.grid-cols;
-                            pinned-section: root.pinned-section;
-                            note-count: root.note-count;
-                            card-clicked(id) => { root.note-activated(id); }
-                            pin-toggled(id) => { root.pin-toggled(id); }
-                            ask-empty-trash => { root.show-empty-trash = true; }
-                        }
-                    if !root.compact:
-                        Rectangle { width: 1px; background: Theme.border; }
-                    if !root.compact && root.has-note:
-                            EditorPane {
-                                horizontal-stretch: 1;
-                                compact: false;
-                                editor-title <=> root.editor-title;
-                                editor-body <=> root.editor-body;
-                                editor-tags <=> root.editor-tags;
-                                editor-pinned <=> root.editor-pinned;
-                                editor-favorite <=> root.editor-favorite;
-                                word-count <=> root.word-count;
-                                save-state <=> root.save-state;
-                                edited-label <=> root.edited-label;
-                                folder-menu-open <=> root.folder-menu-open;
-                                color-popover-open <=> root.color-popover-open;
-                                current-color-index <=> root.current-note-color-index;
-                                in-trash: root.active-view == 4;
-                                in-archive: root.active-view == 3;
-                                folders: root.folders;
-                                current-folder: root.selected-folder-of-editor;
-                                content-changed => { root.editor-content-changed(); }
-                                toggle-pin => { root.toggle-pin-editor(); }
-                                toggle-favorite => { root.toggle-favorite-editor(); }
-                                toggle-archive => { root.archive-editor(); }
-                                toggle-trash => { root.trash-editor(); }
-                                restore => { root.restore-editor(); }
-                                delete-forever => { root.show-delete-forever = true; }
-                                copy-note => { root.copy-editor(); }
-                                tag-added(text) => { root.tag-added(text); }
-                                tag-removed(text) => { root.tag-removed(text); }
-                                assign-folder(id) => { root.assign-folder(id); }
-                                color-picked(idx) => { root.color-picked(idx); }
-                                back => { root.back-to-list(); }
-                            }
-                        if !root.has-note:
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                background: Theme.bg;
-                                EmptyState {
-                                    width: 100%;
-                                    height: 100%;
-                                    title: "Select a note to view";
-                                    subtitle: "or create a new one with Ctrl+N";
-                                }
-                            }
-                }
-
-                // ============ STATUS BAR ============
-                Rectangle {
-                    height: 26px;
-                    Rectangle { y: 0; width: parent.width; height: 1px; background: Theme.border; }
-                    HorizontalLayout {
-                        padding-left: 16px;
-                        padding-right: 16px;
-                        spacing: 8px;
-                        Text {
-                            text: "Local-first · Private by design";
-                            font-size: 10.5px;
-                            color: Theme.text-faint;
-                            vertical-alignment: center;
-                            horizontal-stretch: 1;
-                        }
-                        Text {
-                            text: root.note-count + " notes";
-                            font-size: 10.5px;
-                            color: Theme.text-faint;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
+        // ============ LOCKED VAULT ============
+        if !root.vault-unlocked:
+            UnlockOverlay {
+                mode: root.vault-mode;
+                password <=> root.vault-password;
+                confirm <=> root.vault-confirm;
+                error <=> root.vault-error;
+                show-password <=> root.vault-show-password;
+                unlock => { root.vault-unlock(); }
+                create-vault => { root.vault-create-from-unlock(); }
+                forgot => { root.vault-forgot(); }
             }
 
-            // ============ OVERLAYS ============
-            // Settings dialog
-            if root.show-settings:
-                Rectangle {
-                    width: 100%; height: 100%;
-                    Rectangle { width: 100%; height: 100%; background: Theme.scrim; TouchArea { clicked => { root.show-settings = false; } } }
-                    settingsCard := Rectangle {
-                        width: min(430px, parent.width - 48px);
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2 - 50px;
-                        height: settingsLayout.preferred-height;
-                        border-radius: Theme.r-lg;
+        // ============ APP ============
+        if root.vault-unlocked:
+            app := Rectangle {
+                width: root.width;
+                height: root.height;
+                clip: true;
+                background: Theme.bg;
+
+                VerticalLayout {
+                    // ===== TOP BAR =====
+                    Rectangle {
+                        height: Theme.topbar-height;
+                        background: Theme.bg;
+                        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+                        hamburgerBtn := IconButton {
+                            x: 10px; y: 11px; size: 42px;
+                            clicked => { root.toggle-sidebar(); }
+                            IconMenu { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                        }
+                        ghostLogoSlot := Rectangle {
+                            x: 64px; y: 17px; width: 30px; height: 30px;
+                            VerticalLayout { alignment: center; HorizontalLayout { alignment: center; IconGhost { preferred-width: 26px; preferred-height: 26px; stroke-color: Theme.accent; } } }
+                        }
+                        wordMark := Text {
+                            visible: root.width >= 560px;
+                            x: 104px; y: 0px; height: parent.height; vertical-alignment: center;
+                            text: "Notes"; font-size: 21px; font-weight: 600; color: Theme.text;
+                        }
+                        searchWrap := Rectangle {
+                            x: 210px; y: 10px; width: 560px; height: 44px;
+                            visible: root.width >= 760px;
+                            VerticalLayout {
+                                alignment: center;
+                                search := SearchBar {
+                                    text <=> root.search-text;
+                                    focus-token <=> root.search-focus-token;
+                                    width: 100%;
+                                    submitted => { root.search-changed(root.search-text); }
+                                    cleared => { root.search-changed(""); }
+                                }
+                            }
+                        }
+                        viewToggleBtn := IconButton {
+                            x: 786px; y: 11px; size: 42px;
+                            clicked => { root.toggle-view-mode(); }
+                            if root.list-view: IconLayoutGrid { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                            if !root.list-view: IconList { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                        }
+                        newNoteBtn := Rectangle {
+                            x: 836px; y: 11px; width: 42px; height: 42px; border-radius: 21px; background: Theme.accent;
+                            newTouch := TouchArea { mouse-cursor: pointer; clicked => { root.new-note(); } }
+                            VerticalLayout { alignment: center; HorizontalLayout { alignment: center; IconPlus { stroke-color: Theme.on-accent; preferred-width: 22px; preferred-height: 22px; } } }
+                        }
+                    }
+
+                    if root.vault-mismatch:
+                        Rectangle {
+                            height: 42px;
+                            background: Theme.danger-soft;
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 12px;
+                                spacing: 10px;
+                                VerticalLayout { alignment: center; IconLock { stroke-color: Theme.danger; preferred-width: 17px; preferred-height: 17px; } }
+                                Text { text: "Wrong password on this device — your notes can't be decrypted."; font-size: 12px; color: Theme.danger; vertical-alignment: center; horizontal-stretch: 1; }
+                                TextButton { label: "Unlock correctly"; clicked => { root.lock-now(); } }
+                            }
+                        }
+
+                    // ===== MAIN ROW =====
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        height: root.height - Theme.topbar-height - 26px;
+                        spacing: 0px;
+
+                        // ---- left rail ----
+                        Rectangle {
+                            width: Theme.rail-width;
+                            background: Theme.bg;
+                            railScroll := Flickable {
+                                width: 100%;
+                                height: 100%;
+                                content-width: self.width;
+                                content-height: railColumn.preferred-height;
+                                railColumn := VerticalLayout {
+                                    padding-top: 8px;
+                                    padding-bottom: 8px;
+                                    spacing: 1px;
+                                RailButton { label: "Notes"; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4; clicked => { root.layout-selected(0); root.view-selected(0); } IconFileText { stroke-color: (root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4) ? Theme.accent : Theme.text-dim; preferred-width: 22px; preferred-height: 22px; } }
+                                RailButton { label: "Pinned"; selected: root.active-view == 1; clicked => { root.layout-selected(0); root.view-selected(1); } IconPin { stroke-color: root.active-view == 1 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                                RailButton { label: "Favorites"; selected: root.active-view == 2; clicked => { root.layout-selected(0); root.view-selected(2); } IconStar { stroke-color: root.active-view == 2 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                                RailButton { label: "Archive"; selected: root.active-view == 3; clicked => { root.layout-selected(0); root.view-selected(3); } IconArchive { stroke-color: root.active-view == 3 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                                RailButton { label: "Trash"; selected: root.active-view == 4; clicked => { root.layout-selected(0); root.view-selected(4); } IconTrash { stroke-color: root.active-view == 4 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                                RailButton { label: "Vault"; selected: root.layout-style == 2; clicked => { root.layout-selected(2); } IconPanelLeft { stroke-color: root.layout-style == 2 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                                RailButton { label: "Graph"; selected: root.layout-style == 4; clicked => { root.layout-selected(4); } IconLink2 { stroke-color: root.layout-style == 4 ? Theme.accent : Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
+                                Rectangle {}
+                                Divider { width: 44px; x: 14px; }
+                                RailButton { label: Theme.dark ? "Light" : "Dark"; clicked => { root.toggle-theme(); } if Theme.dark: IconSun { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } if !Theme.dark: IconMoon { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                                RailButton { label: "Settings"; clicked => { root.show-settings = true; } IconSettings { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                                }
+                            }
+                        }
+
+                        // ---- folder sidebar ----
+                        if root.sidebar-open:
+                            Rectangle {
+                                width: Theme.sidebar-width;
+                                background: Theme.bg;
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 2px;
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        height: 32px;
+                                        Text { text: "FOLDERS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+                                        IconButton { size: 27px; clicked => { root.new-folder(); } IconFolderPlus { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+                                    }
+                                    if root.new-folder-open:
+                                        folderInputRow := Rectangle {
+                                            height: 38px;
+                                            border-radius: Theme.r-md;
+                                            background: Theme.surface-2;
+                                            folderInput := TextInput {
+                                                x: 12px; width: parent.width - 48px; height: 100%; single-line: true;
+                                                font-size: 13.5px; color: Theme.text; vertical-alignment: center; text <=> root.new-folder-name;
+                                                selection-background-color: Theme.accent-soft;
+                                                key-pressed(event) => {
+                                                    if event.text == "\n" { root.create-folder(self.text); return accept; }
+                                                    if event.text == "\u{1b}" { root.cancel-new-folder(); return accept; }
+                                                    reject
+                                                }
+                                            }
+                                        }
+                                    for folder[fi] in root.folders:
+                                        folderRow := SidebarRow {
+                                            label: folder.name;
+                                            meta: folder.meta;
+                                            selected: root.active-folder == folder.id;
+                                            show-delete: true;
+                                            clicked => { root.folder-selected(folder.id); }
+                                            delete => { root.delete-folder(folder.id); }
+                                            IconFolder { stroke-color: folderRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
+                                        }
+                                    Rectangle { height: 14px; }
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        height: 32px;
+                                        Text { text: "TAGS"; font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; }
+                                    }
+                                    for tag[ti] in root.tags:
+                                        tagRow := SidebarRow {
+                                            label: "#  " + tag.name;
+                                            meta: tag.meta;
+                                            selected: root.active-tag == tag.name;
+                                            clicked => { root.tag-selected(tag.name); }
+                                            IconTag { stroke-color: tagRow.selected ? Theme.accent : Theme.text-dim; preferred-width: 15px; preferred-height: 15px; }
+                                        }
+                                    Rectangle {}
+                                    Divider {}
+                                    HorizontalLayout {
+                                        padding-left: 10px; padding-right: 10px; padding-top: 8px; padding-bottom: 4px;
+                                        Text { text: "Everything is stored locally on this device."; font-size: 11px; color: Theme.text-faint; wrap: word-wrap; }
+                                    }
+                                }
+                            }
+                        if root.sidebar-open:
+                            Rectangle { width: 1px; background: Theme.border; }
+
+                        // ===== content region =====
+                        if root.layout-style != 2 && root.layout-style != 4 && root.compact && !root.has-note:
+                                boardPane := Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: 100%;
+                                    background: Theme.bg;
+                                    clip: true;
+                                    VerticalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        padding-top: 8px;
+                                        preferred-height: 1px;
+                                        NewNoteComposer { width: 100%; height: 74px; open <=> root.composer-open; title <=> root.composer-title; body <=> root.composer-body; pinned <=> root.composer-pinned; color-index <=> root.composer-color-index; checklist-mode <=> root.composer-checklist-mode; preview-mode <=> root.composer-preview-mode; checklist-items <=> root.composer-checklist-items; preview-styled: root.composer-preview-styled; pending-images <=> root.composer-pending-images; color-popover-open <=> root.composer-color-popover-open; open-requested => { root.composer-open-requested(); } close-requested => { root.composer-close-requested(); } content-changed => { root.composer-content-changed(); } toggle-pin => { root.composer-toggle-pin(); } color-picked(idx) => { root.composer-color-picked(idx); } image-requested => { root.composer-image-requested(); } draw-requested => { root.composer-draw-requested(); } checklist-toggle => { root.composer-checklist-toggle(); } preview-toggle => { root.composer-preview-toggle(); } checklist-add(text) => { root.composer-checklist-add(text); } checklist-toggle-item(line) => { root.composer-checklist-toggle-item(line); } checklist-edit-item(line, text) => { root.composer-checklist-edit-item(line, text); } checklist-remove-item(line) => { root.composer-checklist-remove-item(line); } remove-pending-image(id) => { root.composer-remove-pending-image(id); } }
+                                        NoteListPanel { vertical-stretch: 1; height: 340px;
+                                            horizontal-stretch: 1;
+                                            pinned-notes: root.pinned-notes;
+                                            notes: root.notes;
+                                            pinned-col-0: root.pinned-col-0; pinned-col-1: root.pinned-col-1; pinned-col-2: root.pinned-col-2; pinned-col-3: root.pinned-col-3; pinned-col-4: root.pinned-col-4;
+                                            notes-col-0: root.notes-col-0; notes-col-1: root.notes-col-1; notes-col-2: root.notes-col-2; notes-col-3: root.notes-col-3; notes-col-4: root.notes-col-4;
+                                            list-view: root.list-view;
+                                            layout-style: root.layout-style;
+                                            density: root.density-setting;
+                                            preview-lines: root.card-clamp;
+                                            show-dates: root.show-dates;
+                                            selected-id: root.selected-id;
+                                            view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES")) : root.active-view == 1 ? "PINNED" : root.active-view == 2 ? "FAVORITES" : root.active-view == 3 ? "ARCHIVE" : "TRASH";
+                                            active-view: root.active-view;
+                                            search-text: root.search-text;
+                                            columns: root.grid-cols;
+                                            pinned-section: root.pinned-section;
+                                            note-count: root.note-count;
+                                            manual-order: root.sort-setting == 3 && (root.layout-style == 1 || root.list-view);
+                                            card-clicked(id) => { root.note-activated(id); }
+
+                                            manual-note-moved(id, direction) => { root.manual-note-moved(id, direction); }
+                                            ask-empty-trash => { root.show-empty-trash = true; }
+                                        }
+                                    }
+                                }
+                        if root.layout-style != 2 && root.layout-style != 4 && root.compact && root.has-note:
+                                EditorPane {
+                                    horizontal-stretch: 1;
+                                    compact: true;
+                                    editor-title <=> root.editor-title;
+                                    editor-body <=> root.editor-body;
+                                    editor-tags <=> root.editor-tags;
+                                    editor-pinned <=> root.editor-pinned;
+                                    editor-favorite <=> root.editor-favorite;
+                                    word-count <=> root.word-count;
+                                    save-state <=> root.save-state;
+                                    edited-label <=> root.edited-label;
+                                    folder-menu-open <=> root.folder-menu-open;
+                                    color-popover-open <=> root.color-popover-open;
+                                    current-color-index <=> root.current-note-color-index;
+                                    current-images <=> root.current-images;
+                                    checklist-items <=> root.checklist-items;
+                                    editor-markdown: root.editor-markdown;
+                                    editor-links: root.editor-links;
+                                    mode <=> root.editor-mode;
+                                    checklist-mode <=> root.editor-checklist-mode;
+                                    find-open <=> root.editor-find-open;
+                                    find-query <=> root.editor-find-query;
+                                    find-count <=> root.editor-find-count;
+                                    find-index <=> root.editor-find-index;
+                                    find-selection-offset <=> root.find-selection-offset;
+                                    find-selection-length <=> root.find-selection-length;
+                                    find-selection-token <=> root.find-selection-token;
+                                    in-trash: root.active-view == 4;
+                                    in-archive: root.active-view == 3;
+                                    folders: root.folders;
+                                    current-folder: root.selected-folder-of-editor;
+                                    content-changed => { root.editor-content-changed(); }
+                                    toggle-pin => { root.toggle-pin-editor(); }
+                                    toggle-favorite => { root.toggle-favorite-editor(); }
+                                    toggle-archive => { root.archive-editor(); }
+                                    toggle-trash => { root.trash-editor(); }
+                                    restore => { root.restore-editor(); }
+                                    delete-forever => { root.show-delete-forever = true; }
+                                    copy-note => { root.copy-editor(); }
+                                    export-note => { root.export-editor(); }
+                                    show-timestamps => { root.timestamps-open = true; }
+                                    tag-added(text) => { root.tag-added(text); }
+                                    tag-removed(text) => { root.tag-removed(text); }
+                                    assign-folder(id) => { root.assign-folder(id); }
+                                    color-picked(idx) => { root.color-picked(idx); }
+                                    image-requested => { root.attach-images(); }
+                                    draw-requested => { root.draw-editor(); }
+                                    image-preview(id) => { root.image-preview(id); }
+                                    image-delete(id) => { root.image-delete(id); }
+                                    checklist-toggle => { root.checklist-toggle(); }
+                                    checklist-add(text) => { root.checklist-add(text); }
+                                    checklist-toggle-item(line) => { root.checklist-toggle-item(line); }
+                                    checklist-edit-item(line, text) => { root.checklist-edit-item(line, text); }
+                                    checklist-remove-item(line) => { root.checklist-remove-item(line); }
+                                    link-clicked(link) => { root.link-clicked(link); }
+                                    find-changed => { root.find-changed(); }
+                                    find-next => { root.find-next(); }
+                                    find-previous => { root.find-previous(); }
+                                    close-find => { root.close-find(); }
+                                    back => { root.back-to-list(); }
+                                }
+                        if root.layout-style != 2 && root.layout-style != 4 && !root.compact:
+                                boardDesktopPane := Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: 100%;
+                                    background: Theme.bg;
+                                    clip: true;
+                                    VerticalLayout {
+                                        padding-left: 18px;
+                                        padding-right: 18px;
+                                        padding-top: 10px;
+                                        preferred-height: 1px;
+                                        HorizontalLayout { alignment: center; NewNoteComposer { width: 680px; height: root.composer-open ? 230px : 76px; open <=> root.composer-open; title <=> root.composer-title; body <=> root.composer-body; pinned <=> root.composer-pinned; color-index <=> root.composer-color-index; checklist-mode <=> root.composer-checklist-mode; preview-mode <=> root.composer-preview-mode; checklist-items <=> root.composer-checklist-items; preview-styled: root.composer-preview-styled; pending-images <=> root.composer-pending-images; color-popover-open <=> root.composer-color-popover-open; open-requested => { root.composer-open-requested(); } close-requested => { root.composer-close-requested(); } content-changed => { root.composer-content-changed(); } toggle-pin => { root.composer-toggle-pin(); } color-picked(idx) => { root.composer-color-picked(idx); } image-requested => { root.composer-image-requested(); } draw-requested => { root.composer-draw-requested(); } checklist-toggle => { root.composer-checklist-toggle(); } preview-toggle => { root.composer-preview-toggle(); } checklist-add(text) => { root.composer-checklist-add(text); } checklist-toggle-item(line) => { root.composer-checklist-toggle-item(line); } checklist-edit-item(line, text) => { root.composer-checklist-edit-item(line, text); } checklist-remove-item(line) => { root.composer-checklist-remove-item(line); } remove-pending-image(id) => { root.composer-remove-pending-image(id); } } }
+                                        NoteListPanel { vertical-stretch: 1; height: 340px;
+                                            horizontal-stretch: 1;
+                                            pinned-notes: root.pinned-notes;
+                                            notes: root.notes;
+                                            pinned-col-0: root.pinned-col-0; pinned-col-1: root.pinned-col-1; pinned-col-2: root.pinned-col-2; pinned-col-3: root.pinned-col-3; pinned-col-4: root.pinned-col-4;
+                                            notes-col-0: root.notes-col-0; notes-col-1: root.notes-col-1; notes-col-2: root.notes-col-2; notes-col-3: root.notes-col-3; notes-col-4: root.notes-col-4;
+                                            list-view: root.list-view;
+                                            layout-style: root.layout-style;
+                                            density: root.density-setting;
+                                            preview-lines: root.card-clamp;
+                                            show-dates: root.show-dates;
+                                            selected-id: root.selected-id;
+                                            view-title: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "ALL NOTES")) : root.active-view == 1 ? "PINNED" : root.active-view == 2 ? "FAVORITES" : root.active-view == 3 ? "ARCHIVE" : "TRASH";
+                                            active-view: root.active-view;
+                                            search-text: root.search-text;
+                                            columns: root.grid-cols;
+                                            pinned-section: root.pinned-section;
+                                            note-count: root.note-count;
+                                            manual-order: root.sort-setting == 3 && (root.layout-style == 1 || root.list-view);
+                                            card-clicked(id) => { root.note-activated(id); }
+
+                                            manual-note-moved(id, direction) => { root.manual-note-moved(id, direction); }
+                                            ask-empty-trash => { root.show-empty-trash = true; }
+                                        }
+                                    }
+                                }
+
+                        if root.layout-style == 2:
+                            VaultView {
+                                horizontal-stretch: 1;
+                                filter <=> root.vault-filter;
+                                source-mode <=> root.vault-source-mode;
+                                notes <=> root.vault-notes;
+                                selected-id: root.vault-selected-id;
+                                has-note: root.vault-has-note;
+                                doc-title <=> root.vault-title;
+                                doc-meta: root.vault-meta;
+                                doc-markdown: root.vault-markdown;
+                                doc-source <=> root.vault-source;
+                                links-out <=> root.vault-links-out;
+                                backlinks <=> root.vault-backlinks;
+                                pinned: root.vault-pinned;
+                                filter-changed(text) => { root.vault-filter-changed(text); }
+                                note-selected(id) => { root.vault-note-selected(id); }
+                                new-note => { root.vault-new-note(); }
+                                pin-toggled => { root.vault-pin-toggled(); }
+                                edit-source => { root.vault-edit-source(); }
+                                source-edited => { root.vault-source-edited(); }
+                                open-note => { root.vault-open(); }
+                                link-clicked(link) => { root.link-clicked(link); }
+                                title-edited(title) => { root.vault-title-edited(title); }
+                            }
+
+                        if root.layout-style == 4:
+                            GraphView {
+                                horizontal-stretch: 1;
+                                nodes: root.graph-nodes;
+                                links: root.graph-links;
+                                has-selection <=> root.graph-has-selection;
+                                selected-id: root.graph-selected-id;
+                                selected-title <=> root.graph-selected-title;
+                                selected-meta: root.graph-selected-meta;
+                                selected-markdown: root.graph-selected-markdown;
+                                selected-links <=> root.graph-selected-links;
+                                graph-pointer-down(x, y, alt) => { root.graph-pointer-down(x, y, alt); }
+                                graph-pointer-move(x, y, alt) => { root.graph-pointer-move(x, y, alt); }
+                                graph-pointer-up(x, y, alt) => { root.graph-pointer-up(x, y, alt); }
+                                graph-wheel(delta, alt) => { root.graph-wheel(delta, alt); }
+                                relabel => { root.graph-relabel(); }
+                                close-selection => { root.graph-close-selection(); }
+                                open-note => { root.graph-open-note(); }
+                                unlink-all => { root.graph-unlink-all(); }
+                                link-clicked(link) => { root.link-clicked(link); }
+                            }
+                    }
+
+                    // ===== STATUS BAR =====
+                    Rectangle {
+                        height: 26px;
+                        Rectangle { y: 0; width: parent.width; height: 1px; background: Theme.border; }
+                        HorizontalLayout {
+                            padding-left: 16px; padding-right: 16px; spacing: 8px;
+                            Text { text: root.vault-enabled ? "Local-first · Vault encrypted" : "Local-first · Plaintext"; font-size: 10.5px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: root.note-count + " notes"; font-size: 10.5px; color: Theme.text-faint; vertical-alignment: center; }
+                        }
+                    }
+                }
+
+                // ===== editor modal (desktop/board/vault/graph) =====
+                if root.has-note && !root.compact:
+                    editorScrim := Rectangle {
+                        x: Theme.rail-width;
+                        y: Theme.topbar-height;
+                        width: root.width - Theme.rail-width;
+                        height: root.height - Theme.topbar-height - 26px;
+                        background: Theme.bg;
+                        EditorPane {
+                                width: 100%; height: 100%; compact: false;
+                                editor-title <=> root.editor-title;
+                                editor-body <=> root.editor-body;
+                                editor-tags <=> root.editor-tags;
+                                editor-pinned <=> root.editor-pinned;
+                                editor-favorite <=> root.editor-favorite;
+                                word-count <=> root.word-count;
+                                save-state <=> root.save-state;
+                                edited-label <=> root.edited-label;
+                                folder-menu-open <=> root.folder-menu-open;
+                                color-popover-open <=> root.color-popover-open;
+                                current-color-index <=> root.current-note-color-index;
+                                current-images <=> root.current-images;
+                                checklist-items <=> root.checklist-items;
+                                editor-markdown: root.editor-markdown;
+                                editor-links: root.editor-links;
+                                mode <=> root.editor-mode;
+                                checklist-mode <=> root.editor-checklist-mode;
+                                find-open <=> root.editor-find-open;
+                                find-query <=> root.editor-find-query;
+                                find-count <=> root.editor-find-count;
+                                find-index <=> root.editor-find-index;
+                                    find-selection-offset <=> root.find-selection-offset;
+                                    find-selection-length <=> root.find-selection-length;
+                                    find-selection-token <=> root.find-selection-token;
+                                in-trash: root.active-view == 4;
+                                in-archive: root.active-view == 3;
+                                folders: root.folders;
+                                current-folder: root.selected-folder-of-editor;
+                                content-changed => { root.editor-content-changed(); }
+                                toggle-pin => { root.toggle-pin-editor(); }
+                                toggle-favorite => { root.toggle-favorite-editor(); }
+                                toggle-archive => { root.archive-editor(); }
+                                toggle-trash => { root.trash-editor(); }
+                                restore => { root.restore-editor(); }
+                                delete-forever => { root.show-delete-forever = true; }
+                                copy-note => { root.copy-editor(); }
+                                export-note => { root.export-editor(); }
+                                show-timestamps => { root.timestamps-open = true; }
+                                tag-added(text) => { root.tag-added(text); }
+                                tag-removed(text) => { root.tag-removed(text); }
+                                assign-folder(id) => { root.assign-folder(id); }
+                                color-picked(idx) => { root.color-picked(idx); }
+                                image-requested => { root.attach-images(); }
+                                draw-requested => { root.draw-editor(); }
+                                image-preview(id) => { root.image-preview(id); }
+                                image-delete(id) => { root.image-delete(id); }
+                                checklist-toggle => { root.checklist-toggle(); }
+                                checklist-add(text) => { root.checklist-add(text); }
+                                checklist-toggle-item(line) => { root.checklist-toggle-item(line); }
+                                checklist-edit-item(line, text) => { root.checklist-edit-item(line, text); }
+                                checklist-remove-item(line) => { root.checklist-remove-item(line); }
+                                link-clicked(link) => { root.link-clicked(link); }
+                                find-changed => { root.find-changed(); }
+                                find-next => { root.find-next(); }
+                                find-previous => { root.find-previous(); }
+                                close-find => { root.close-find(); }
+                                back => { root.back-to-list(); }
+                            }
+                    }
+
+                // ===== link suggestions =====
+                if root.editor-suggestions-visible:
+                    Rectangle {
+                        x: root.width > 1000px ? 250px : 18px;
+                        y: 210px;
+                        width: 280px;
+                        height: min(240px, suggestions.preferred-height + 12px);
+                        border-radius: Theme.r-md;
                         background: Theme.surface;
                         border-width: 1px;
                         border-color: Theme.border-strong;
-                        drop-shadow-blur: 34px;
-                        drop-shadow-color: #00000066;
-                        settingsLayout := VerticalLayout {
-                            padding: 22px;
-                            spacing: 10px;
-                            Text { text: "Settings"; font-size: 17px; font-weight: 600; color: Theme.text; }
-                            HorizontalLayout {
-                                padding-top: 4px;
-                                Text { text: "Appearance"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
-                            }
-                            HorizontalLayout {
-                                spacing: 10px;
-                                // Dark option
-                                darkOpt := Rectangle {
-                                    height: 78px;
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.r-md;
-                                    background: Theme.dark ? Theme.accent-soft : Theme.surface-2;
-                                    border-width: 1.5px;
-                                    border-color: Theme.dark ? Theme.accent : transparent;
-                                    TouchArea { mouse-cursor: pointer; clicked => { if !Theme.dark { root.toggle-theme(); } } }
-                                    VerticalLayout {
-                                        padding: 10px;
-                                        spacing: 6px;
-                                        IconMoon { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
-                                        Text { text: "Dark"; font-size: 13px; font-weight: 600; color: Theme.text; }
-                                    }
+                        drop-shadow-blur: 20px;
+                        drop-shadow-color: #00000060;
+                        suggestions := VerticalLayout {
+                            padding: 6px;
+                            spacing: 2px;
+                            Text { text: "LINK TO NOTE"; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
+                            for suggestion[i] in root.editor-suggestions:
+                                suggestionRow := TouchArea {
+                                    height: 30px;
+                                    clicked => { root.suggestion-picked(suggestion); }
+                                    Rectangle { border-radius: Theme.r-sm; background: suggestionRow.has-hover ? Theme.surface-2 : transparent; }
+                                    Text { x: 8px; y: 0; height: 100%; vertical-alignment: center; text: suggestion; font-size: 12.5px; color: Theme.text; }
                                 }
-                                lightOpt := Rectangle {
-                                    height: 78px;
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.r-md;
-                                    background: !Theme.dark ? Theme.accent-soft : Theme.surface-2;
-                                    border-width: 1.5px;
-                                    border-color: !Theme.dark ? Theme.accent : transparent;
-                                    TouchArea { mouse-cursor: pointer; clicked => { if Theme.dark { root.toggle-theme(); } } }
-                                    VerticalLayout {
-                                        padding: 10px;
-                                        spacing: 6px;
-                                        IconSun { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
-                                        Text { text: "Light"; font-size: 13px; font-weight: 600; color: Theme.text; }
-                                    }
-                                }
-                            }
-                            HorizontalLayout {
-                                padding-top: 4px;
-                                Text { text: "About"; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
-                            }
-                            HorizontalLayout {
-                                spacing: 10px;
-                                VerticalLayout { alignment: center; IconGhost { stroke-color: Theme.accent; preferred-width: 30px; preferred-height: 30px; } }
-                                VerticalLayout {
-                                    spacing: 1px;
-                                    Text { text: "Notes · yellod suite"; font-size: 13px; font-weight: 600; color: Theme.text; }
-                                    Text { text: "Version 1.0.0 · local-first, private"; font-size: 11.5px; color: Theme.text-faint; }
-                                }
-                                Rectangle {} // spring
-                                TextButton { label: "Done"; emphasis: true; clicked => { root.show-settings = false; } }
-                            }
-                            AboutSlint {}
                         }
                     }
-                }
 
-            // Delete forever confirm
-            if root.show-delete-forever:
-                ConfirmDialog {
-                    title: "Delete forever?";
-                    message: "This note will be permanently deleted. This action cannot be undone.";
-                    confirm-label: "Delete";
-                    danger: true;
-                    confirmed => { root.delete-forever-confirmed(); }
-                    cancelled => { root.show-delete-forever = false; }
-                }
+                // ===== overlays =====
+                if root.doodle-open:
+                    DoodleOverlay {
+                        strokes: root.doodle-strokes;
+                        pen-color <=> root.doodle-pen-color;
+                        pen-size <=> root.doodle-pen-size;
+                        draw-down(x, y, shift) => { root.doodle-draw-down(x, y, shift); }
+                        draw-move(x, y, shift) => { root.doodle-draw-move(x, y, shift); }
+                        draw-up(x, y) => { root.doodle-draw-up(x, y); }
+                        undo => { root.doodle-undo(); }
+                        clear => { root.doodle-clear(); }
+                        cancel => { root.doodle-cancel(); }
+                        save => { root.doodle-save(); }
+                    }
 
-            // Empty trash confirm
-            if root.show-empty-trash:
-                ConfirmDialog {
-                    title: "Empty trash?";
-                    message: "All notes in Trash will be permanently deleted. This action cannot be undone.";
-                    confirm-label: "Empty trash";
-                    danger: true;
-                    confirmed => { root.empty-trash-confirmed(); }
-                    cancelled => { root.show-empty-trash = false; }
-                }
+                if root.show-settings:
+                    SettingsView {
+                        dark <=> root.dark;
+                        neo <=> root.neo;
+                        layout <=> root.layout-style;
+                        density <=> root.density-setting;
+                        mobile-two <=> root.mobile-two;
+                        sort <=> root.sort-setting;
+                        pinned-first <=> root.pinned-first;
+                        md-cards <=> root.md-cards;
+                        show-dates <=> root.show-dates;
+                        clamp <=> root.card-clamp;
+                        vault-enabled: root.vault-enabled;
+                        security-error <=> root.settings-security-error;
+                        stats-text: root.settings-stats;
+                        about-version: "1.1.0";
+                        close => { root.show-settings = false; }
+                        theme-selected(choice) => { if choice != Theme.dark { root.toggle-theme(); } }
+                        layout-selected(choice) => { root.layout-selected(choice); }
+                        density-selected(choice) => { root.settings-density-selected(choice); }
+                        mobile-two-toggled => { root.settings-toggle-mobile-two(); }
+                        sort-selected(choice) => { root.settings-sort-selected(choice); }
+                        pinned-first-toggled => { root.settings-toggle-pinned-first(); }
+                        md-cards-toggled => { root.settings-toggle-md-cards(); }
+                        show-dates-toggled => { root.settings-toggle-show-dates(); }
+                        clamp-selected(choice) => { root.settings-clamp-selected(choice); }
+                        markdown-guide => { root.markdown-guide(); }
+                        import-md => { root.import-md(); }
+                        export-all => { root.export-all-md(); }
+                        empty-trash => { root.show-empty-trash = true; }
+                        create-vault(pass, confirm) => { root.create-vault(pass, confirm); }
+                        change-password(cur, newpass) => { root.change-password(cur, newpass); }
+                        reset-password(newpass, confirm, ack) => { root.reset-password(newpass, confirm, ack); }
+                        lock-now => { root.lock-now(); }
+                    }
 
-            // Toast
-            if root.toast-visible:
-                Toast {
-                    width: max(220px, self.preferred-width);
-                    x: (app.width - self.width) / 2;
-                    y: app.height - 66px;
-                    message: root.toast-message;
-                }
-        }
+                if root.show-markdown-guide:
+                    MarkdownGuide { closed => { root.show-markdown-guide = false; } }
+
+                if root.timestamps-open:
+                    timestamps := Rectangle {
+                        width: 100%; height: 100%; background: Theme.scrim;
+                        TouchArea { clicked => { root.timestamps-open = false; } }
+                        Rectangle {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2 - 40px;
+                            width: min(430px, parent.width - 48px);
+                            height: min(480px, parent.height - 48px);
+                            border-radius: Theme.r-lg;
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border-strong;
+                            VerticalLayout {
+                                padding: 22px;
+                                spacing: 10px;
+                                Text { text: "Note — timestamps"; font-size: 17px; font-weight: 650; color: Theme.text; }
+                                HorizontalLayout {
+                                    Text { text: "Created"; font-size: 12px; color: Theme.text-faint; horizontal-stretch: 1; vertical-alignment: center; }
+                                    Text { text: root.timestamp-created; font-size: 12px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+                                }
+                                HorizontalLayout {
+                                    Text { text: "Last edited"; font-size: 12px; color: Theme.text-faint; horizontal-stretch: 1; vertical-alignment: center; }
+                                    Text { text: root.timestamp-edited; font-size: 12px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+                                }
+                                Rectangle { height: 1px; background: Theme.border; }
+                                Text { text: "ACTIVITY"; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
+                                Flickable {
+                                    vertical-stretch: 1;
+                                    height: 100%;
+                                    content-height: activityList.preferred-height;
+                                    activityList := VerticalLayout {
+                                        spacing: 6px;
+                                        for activity[i] in root.timestamp-activity:
+                                            Text { text: "•  " + activity; font-size: 12px; color: Theme.text-dim; }
+                                        if root.timestamp-activity.length == 0:
+                                            Text { text: "No activity recorded yet."; font-size: 12px; color: Theme.text-faint; }
+                                    }
+                                }
+                                HorizontalLayout { alignment: end; TextButton { label: "Close"; emphasis: true; clicked => { root.timestamps-open = false; } } }
+                            }
+                        }
+                    }
+
+                if root.image-preview-open:
+                    lightbox := Rectangle {
+                        width: 100%; height: 100%; background: #000000D9;
+                        TouchArea { clicked => { root.close-image-preview(); } }
+                        IconButton {
+                            x: parent.width - 54px; y: 16px; size: 38px;
+                            clicked => { root.close-image-preview(); }
+                            Text { text: "×"; font-size: 25px; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Image {
+                            x: 40px; y: 48px; width: parent.width - 80px; height: parent.height - 140px;
+                            source: root.image-preview-image;
+                            image-fit: contain;
+                        }
+                        HorizontalLayout {
+                            x: 40px; y: parent.height - 62px; width: parent.width - 80px; height: 30px;
+                            Text { text: root.image-preview-name + "  ·  " + root.image-preview-size; font-size: 12px; color: #e8eaed; vertical-alignment: center; horizontal-stretch: 1; }
+                            TextButton { label: "Download"; emphasis: true; clicked => { root.image-download-preview(); } }
+                        }
+                    }
+
+                if root.show-delete-forever:
+                    ConfirmDialog {
+                        title: "Delete forever?";
+                        message: "This note and its attachments will be permanently deleted. This action cannot be undone.";
+                        confirm-label: "Delete";
+                        danger: true;
+                        confirmed => { root.delete-forever-confirmed(); }
+                        cancelled => { root.show-delete-forever = false; }
+                    }
+
+                if root.show-empty-trash:
+                    ConfirmDialog {
+                        title: "Empty trash?";
+                        message: "All notes in Trash and their attachments will be permanently deleted. This action cannot be undone.";
+                        confirm-label: "Empty trash";
+                        danger: true;
+                        confirmed => { root.empty-trash-confirmed(); }
+                        cancelled => { root.show-empty-trash = false; }
+                    }
+
+                if root.toast-visible:
+                    Toast {
+                        width: max(220px, self.preferred-width);
+                        x: (app.width - self.width) / 2;
+                        y: app.height - 66px;
+                        message: root.toast-message;
+                    }
+            }
     }
 }

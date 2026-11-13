@@ -5,6 +5,7 @@
 //! - SQLite storage with FTS5 full-text search
 //! - small utilities shared by the native and web frontends
 
+pub mod crypto;
 pub mod model;
 pub mod storage;
 pub mod sys;

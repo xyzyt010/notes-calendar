@@ -6,6 +6,15 @@ use uuid::Uuid;
 
 // ---------- Notes ----------
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NotesSort {
+    Updated,
+    Created,
+    Title,
+    Manual,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Note {
     pub id: Uuid,
@@ -20,6 +29,10 @@ pub struct Note {
     pub color: Option<String>,
     pub archived: bool,
     pub trashed: bool,
+    /// User-controlled order for Manual sorting.
+    pub sort_order: i64,
+    /// True when title/body/tags are stored encrypted at rest.
+    pub encrypted: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -38,6 +51,8 @@ impl Note {
             color: None,
             archived: false,
             trashed: false,
+            sort_order: 0,
+            encrypted: false,
             created_at: now,
             updated_at: now,
         }
@@ -83,6 +98,9 @@ pub struct NoteSummary {
     pub favorite: bool,
     pub color: Option<String>,
     pub updated_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub sort_order: i64,
+    pub image_count: i64,
 }
 
 impl From<&Note> for NoteSummary {
@@ -98,6 +116,9 @@ impl From<&Note> for NoteSummary {
             favorite: n.favorite,
             color: n.color.clone(),
             updated_at: n.updated_at,
+            created_at: n.created_at,
+            sort_order: n.sort_order,
+            image_count: 0,
         }
     }
 }
@@ -115,6 +136,23 @@ pub fn strip_markdown(input: &str) -> String {
         out.push_str(t);
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteImageMeta {
+    pub id: Uuid,
+    pub note_id: Uuid,
+    pub name: String,
+    pub mime: String,
+    pub size: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteImage {
+    #[serde(flatten)]
+    pub meta: NoteImageMeta,
+    pub bytes: Vec<u8>,
 }
 
 // ---------- Calendar ----------

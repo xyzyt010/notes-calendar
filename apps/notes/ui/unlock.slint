@@ -1,0 +1,150 @@
+// Local vault unlock screen. Shown before any plaintext data is exposed.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconGhost, IconLock, IconEye,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, TextButton,
+} from "../../shared-ui/components.slint";
+
+export component UnlockOverlay inherits Rectangle {
+    in-out property <int> mode: 1; // 0 create · 1 unlock
+    in-out property <string> password: "";
+    in-out property <string> confirm: "";
+    in-out property <string> error: "";
+    in-out property <bool> show-password: false;
+
+    callback unlock();
+    callback create-vault();
+    callback forgot();
+
+    width: 100%;
+    height: 100%;
+    background: Theme.bg;
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: min(430px, parent.width - 48px);
+                height: card.preferred-height;
+                border-radius: Theme.r-xl;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-blur: 30px;
+                drop-shadow-color: #00000070;
+                card := VerticalLayout {
+                    padding: 28px;
+                    spacing: 12px;
+                    alignment: center;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        VerticalLayout {
+                            alignment: center;
+                            if root.mode == 1:
+                                IconLock { stroke-color: Theme.accent; preferred-width: 42px; preferred-height: 42px; }
+                            if root.mode == 0:
+                                IconGhost { stroke-color: Theme.accent; preferred-width: 42px; preferred-height: 42px; }
+                        }
+                    }
+                    Text {
+                        text: root.mode == 1 ? "Unlock" : "Create your vault";
+                        font-size: 26px;
+                        font-weight: 650;
+                        color: Theme.text;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: root.mode == 1
+                            ? "Enter your password to decrypt your notes on this device."
+                            : "Choose a strong password. It encrypts every title, body, tag and image on this device.";
+                        font-size: 13px;
+                        color: Theme.text-dim;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+                    Rectangle { height: 4px; }
+                    Rectangle {
+                        height: 46px;
+                        border-radius: Theme.r-md;
+                        background: Theme.surface-2;
+                        border-width: 1px;
+                        border-color: passwordInput.has-focus ? Theme.accent : transparent;
+                        passwordInput := TextInput {
+                            x: 14px;
+                            width: parent.width - 54px;
+                            height: 100%;
+                            input-type: root.show-password ? InputType.text : InputType.password;
+                            font-size: 15px;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            selection-background-color: Theme.accent-soft;
+                            text <=> root.password;
+                            key-pressed(event) => {
+                                if event.text == "\n" {
+                                    if root.mode == 1 { root.unlock(); } else { root.create-vault(); }
+                                    return accept;
+                                }
+                                reject
+                            }
+                        }
+                        IconButton {
+                            x: parent.width - 44px;
+                            y: 4px;
+                            size: 38px;
+                            clicked => { root.show-password = !root.show-password; }
+                            IconEye { stroke-color: Theme.text-dim; preferred-width: 18px; preferred-height: 18px; }
+                        }
+                    }
+                    if root.mode == 0:
+                        Rectangle {
+                            height: 46px;
+                            border-radius: Theme.r-md;
+                            background: Theme.surface-2;
+                            confirmInput := TextInput {
+                                x: 14px;
+                                width: parent.width - 28px;
+                                height: 100%;
+                                input-type: root.show-password ? InputType.text : InputType.password;
+                                font-size: 15px;
+                                color: Theme.text;
+                                vertical-alignment: center;
+                                selection-background-color: Theme.accent-soft;
+                                text <=> root.confirm;
+                                key-pressed(event) => {
+                                    if event.text == "\n" { root.create-vault(); return accept; }
+                                    reject
+                                }
+                            }
+                        }
+                    if root.error != "":
+                        Text {
+                            text: root.error;
+                            font-size: 12px;
+                            color: Theme.danger;
+                            wrap: word-wrap;
+                        }
+                    TextButton {
+                        label: root.mode == 1 ? "Unlock" : "Create vault";
+                        emphasis: true;
+                        clicked => {
+                            if root.mode == 1 { root.unlock(); } else { root.create-vault(); }
+                        }
+                    }
+                    if root.mode == 1:
+                        TextButton { label: "Forgot password?"; clicked => { root.forgot(); } }
+                    Text {
+                        text: "AES-256-GCM · keys stay on this device";
+                        font-size: 10.5px;
+                        color: Theme.text-faint;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

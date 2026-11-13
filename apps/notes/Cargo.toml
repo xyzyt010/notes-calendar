@@ -14,8 +14,11 @@ serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 dirs = "6"
+rand.workspace = true
 anyhow.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
+rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "ico"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 arboard = "3"

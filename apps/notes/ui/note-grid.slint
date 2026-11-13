@@ -1,31 +1,70 @@
-// Note list panel: optional PINNED/OTHERS sections, responsive grid or compact list,
-// flick-scroll, search-aware empty states.
+// Note board: Keep masonry / Notion page rows / Neomorph cards.
+// Column assignment is computed in Rust so cards can have variable heights.
 
 import { Theme } from "../../shared-ui/theme.slint";
 import {
     NoteCard, EmptyState, TextButton, NoteData,
 } from "../../shared-ui/components.slint";
 
+component MasonryColumn inherits VerticalLayout {
+    in property <[NoteData]> notes: [];
+    in property <string> selected-id: "";
+    in property <int> preview-lines: 5;
+    in property <bool> show-dates: true;
+    in property <bool> column-visible: true;
+    callback card-clicked(string);
+    callback pin-toggled(string);
+
+    spacing: 12px;
+    visible: root.column-visible;
+
+    for note[i] in root.notes:
+        NoteCard {
+            note: note;
+            selected: note.id == root.selected-id;
+            preview-lines: root.preview-lines;
+            show-date: root.show-dates;
+            clicked => { root.card-clicked(note.id); }
+            pin-toggled => { root.pin-toggled(note.id); }
+        }
+}
+
 export component NoteListPanel inherits Rectangle {
     in property <[NoteData]> pinned-notes: [];
     in property <[NoteData]> notes: [];
+    in property <[NoteData]> pinned-col-0: [];
+    in property <[NoteData]> pinned-col-1: [];
+    in property <[NoteData]> pinned-col-2: [];
+    in property <[NoteData]> pinned-col-3: [];
+    in property <[NoteData]> pinned-col-4: [];
+    in property <[NoteData]> notes-col-0: [];
+    in property <[NoteData]> notes-col-1: [];
+    in property <[NoteData]> notes-col-2: [];
+    in property <[NoteData]> notes-col-3: [];
+    in property <[NoteData]> notes-col-4: [];
     in property <bool> list-view: false;
+    in property <int> layout-style: 0; // 0 Keep · 1 Notion · 2 Obsidian · 3 Neomorph
+    in property <int> density: 1;      // 0 compact · 1 cozy · 2 roomy
+    in property <int> preview-lines: 5;
+    in property <bool> show-dates: true;
     in property <string> selected-id: "";
     in property <string> view-title: "All notes";
-    in property <int> active-view: 0;         // 0 all · 1 pinned · 2 favorites · 3 archive · 4 trash
+    in property <int> active-view: 0;
     in property <string> search-text: "";
     in property <int> columns: 4;
     in property <bool> pinned-section: false;
     in property <int> note-count: 0;
+    in property <bool> manual-order: false;
 
     callback card-clicked(string);
     callback pin-toggled(string);
     callback ask-empty-trash();
+    callback manual-note-moved(string, int);
 
     background: Theme.bg;
+    preferred-height: 1px;
 
     VerticalLayout {
-        // ---- header strip ----
         HorizontalLayout {
             height: 34px;
             padding-top: 2px;
@@ -48,8 +87,8 @@ export component NoteListPanel inherits Rectangle {
                 }
         }
 
-        // ---- scrollable content ----
         scroll := Flickable {
+            vertical-stretch: 1;
             content-width: self.width;
             content-height: contentLayout.preferred-height;
 
@@ -60,22 +99,27 @@ export component NoteListPanel inherits Rectangle {
                 padding-bottom: 24px;
                 spacing: 10px;
 
-                // ===== List (compact) mode =====
-                if root.list-view:
+                // ===== Notion / compact rows =====
+                if root.list-view || root.layout-style == 1:
                     VerticalLayout {
-                        spacing: 10px;
+                        spacing: 8px;
                         for note[i] in root.notes:
                             NoteCard {
                                 note: note;
                                 compact: true;
+                                preview-lines: root.preview-lines;
+                                show-date: root.show-dates;
                                 selected: note.id == root.selected-id;
+                                manual-reorder: root.manual-order;
                                 clicked => { root.card-clicked(note.id); }
                                 pin-toggled => { root.pin-toggled(note.id); }
+                                move-up => { root.manual-note-moved(note.id, -1); }
+                                move-down => { root.manual-note-moved(note.id, 1); }
                             }
                     }
 
-                // ===== Grid mode =====
-                if !root.list-view:
+                // ===== Masonry (Keep / Neomorph) =====
+                if !root.list-view && root.layout-style != 1:
                     VerticalLayout {
                         spacing: 12px;
 
@@ -91,17 +135,13 @@ export component NoteListPanel inherits Rectangle {
                                 }
                             }
                         if root.pinned-section && root.pinned-notes.length > 0:
-                            GridLayout {
+                            HorizontalLayout {
                                 spacing: 12px;
-                                for note[i] in root.pinned-notes:
-                                    NoteCard {
-                                        col: i - Math.floor(i / root.columns) * root.columns;
-                                        row: Math.floor(i / root.columns);
-                                        note: note;
-                                        selected: note.id == root.selected-id;
-                                        clicked => { root.card-clicked(note.id); }
-                                        pin-toggled => { root.pin-toggled(note.id); }
-                                    }
+                                MasonryColumn { notes: root.pinned-col-0; column-visible: root.columns >= 1; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                                MasonryColumn { notes: root.pinned-col-1; column-visible: root.columns >= 2; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                                MasonryColumn { notes: root.pinned-col-2; column-visible: root.columns >= 3; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                                MasonryColumn { notes: root.pinned-col-3; column-visible: root.columns >= 4; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                                MasonryColumn { notes: root.pinned-col-4; column-visible: root.columns >= 5; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
                             }
                         if root.pinned-section && root.notes.length > 0:
                             HorizontalLayout {
@@ -115,22 +155,16 @@ export component NoteListPanel inherits Rectangle {
                                     color: Theme.text-faint;
                                 }
                             }
-                        if !root.list-view:
-                            GridLayout {
-                                spacing: 12px;
-                                for note[i] in root.notes:
-                                    NoteCard {
-                                        col: i - Math.floor(i / root.columns) * root.columns;
-                                        row: Math.floor(i / root.columns);
-                                        note: note;
-                                        selected: note.id == root.selected-id;
-                                        clicked => { root.card-clicked(note.id); }
-                                        pin-toggled => { root.pin-toggled(note.id); }
-                                    }
-                            }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            MasonryColumn { notes: root.notes-col-0; column-visible: root.columns >= 1; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                            MasonryColumn { notes: root.notes-col-1; column-visible: root.columns >= 2; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                            MasonryColumn { notes: root.notes-col-2; column-visible: root.columns >= 3; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                            MasonryColumn { notes: root.notes-col-3; column-visible: root.columns >= 4; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                            MasonryColumn { notes: root.notes-col-4; column-visible: root.columns >= 5; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                        }
                     }
 
-                // ===== Empty states =====
                 if root.note-count == 0:
                     Rectangle {
                         height: 320px;

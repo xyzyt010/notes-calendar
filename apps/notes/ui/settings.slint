@@ -1,0 +1,276 @@
+// Full settings window: appearance, layout, behaviour, security and data.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import { CheckBox } from "std-widgets.slint";
+import {
+    IconMoon, IconSun, IconLayoutGrid, IconList, IconPanelLeft,
+    IconGhost, IconDownload, IconUpload, IconTrash, IconLock, IconUnlock,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, TextButton, Divider,
+} from "../../shared-ui/components.slint";
+
+export component SettingsView inherits Rectangle {
+    in-out property <bool> dark: true;
+    in-out property <bool> neo: false;
+    in-out property <int> layout: 0;      // 0 Keep · 1 Notion · 2 Obsidian · 3 Neomorph · 4 Graph
+    in-out property <int> density: 1;     // 0 compact · 1 cozy · 2 roomy
+    in-out property <bool> mobile-two: true;
+    in-out property <int> sort: 0;        // 0 updated · 1 created · 2 title · 3 manual
+    in-out property <bool> pinned-first: true;
+    in-out property <bool> md-cards: false;
+    in-out property <bool> show-dates: true;
+    in-out property <int> clamp: 5;
+    in-out property <bool> vault-enabled: false;
+    in-out property <int> security-mode: 0; // 0 overview · 1 enable · 2 change · 3 reset
+    in-out property <string> security-error: "";
+    in-out property <string> new-password: "";
+    in-out property <string> confirm-password: "";
+    in-out property <string> current-password: "";
+    in-out property <bool> reset-acknowledged: false;
+    in-out property <string> stats-text: "";
+    in-out property <string> about-version: "1.1.0";
+
+    callback close();
+    callback theme-selected(bool);
+    callback layout-selected(int);
+    callback density-selected(int);
+    callback mobile-two-toggled();
+    callback sort-selected(int);
+    callback pinned-first-toggled();
+    callback md-cards-toggled();
+    callback show-dates-toggled();
+    callback clamp-selected(int);
+    callback markdown-guide();
+    callback import-md();
+    callback export-all();
+    callback empty-trash();
+    callback create-vault(string, string);
+    callback change-password(string, string);
+    callback reset-password(string, string, bool);
+    callback lock-now();
+
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim;
+
+    TouchArea { clicked => { root.close(); } }
+
+    card := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2 - 8px;
+        width: min(620px, parent.width - 32px);
+        height: min(720px, parent.height - 32px);
+        border-radius: Theme.r-xl;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 36px;
+        drop-shadow-color: #00000080;
+
+        Flickable {
+            width: 100%;
+            height: 100%;
+            content-width: self.width;
+            content-height: content.preferred-height;
+            content := VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+
+                HorizontalLayout {
+                    height: 36px;
+                    Text { text: "Settings"; font-size: 22px; font-weight: 650; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                    TextButton { label: "Done"; emphasis: true; clicked => { root.close(); } }
+                }
+
+                // ---------- Theme ----------
+                Text { text: "THEME"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    for choice[i] in [false, true]:
+                        Rectangle {
+                            height: 82px;
+                            horizontal-stretch: 1;
+                            border-radius: Theme.r-md;
+                            background: (choice == root.dark) ? Theme.accent-soft : Theme.surface-2;
+                            border-width: 1.5px;
+                            border-color: (choice == root.dark) ? Theme.accent : transparent;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.theme-selected(choice); }
+                            }
+                            VerticalLayout {
+                                padding: 10px;
+                                spacing: 5px;
+                                if choice:
+                                    IconMoon { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
+                                if !choice:
+                                    IconSun { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
+                                Text { text: choice ? "Dark" : "Light"; font-size: 13px; font-weight: 600; color: Theme.text; }
+                            }
+                        }
+                }
+
+                // ---------- View style ----------
+                Text { text: "VIEW STYLE"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Text { text: "Applies to Notes, Archive and Trash."; font-size: 11.5px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    for choice[i] in [0, 1, 2, 3, 4]:
+                        Rectangle {
+                            width: 102px;
+                            height: 94px;
+                            border-radius: Theme.r-md;
+                            background: root.layout == choice ? Theme.accent-soft : Theme.surface-2;
+                            border-width: 1.5px;
+                            border-color: root.layout == choice ? Theme.accent : transparent;
+                            TouchArea { mouse-cursor: pointer; clicked => { root.layout-selected(choice); } }
+                            VerticalLayout {
+                                padding: 7px;
+                                spacing: 4px;
+                                alignment: center;
+                                if choice == 0:
+                                    IconLayoutGrid { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
+                                if choice == 1:
+                                    IconList { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
+                                if choice == 2:
+                                    IconPanelLeft { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
+                                if choice == 3:
+                                    Rectangle { width: 22px; height: 22px; border-radius: 6px; background: Theme.neo-raised; }
+                                if choice == 4:
+                                    Rectangle { width: 22px; height: 22px; border-radius: 11px; border-width: 1.5px; border-color: Theme.accent; background: transparent; }
+                                Text {
+                                    text: choice == 0 ? "Keep" : choice == 1 ? "Notion" : choice == 2 ? "Obsidian" : choice == 3 ? "Neomorph" : "3D graph";
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    color: Theme.text;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: choice == 0 ? "Masonry" : choice == 1 ? "Rows" : choice == 2 ? "Vault" : choice == 3 ? "Soft" : "Nodes";
+                                    font-size: 9px;
+                                    color: Theme.text-faint;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+                }
+
+                // ---------- Density ----------
+                Text { text: "DENSITY"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 6px;
+                    for choice[i] in [0, 1, 2]:
+                        Rectangle {
+                            height: 36px;
+                            horizontal-stretch: 1;
+                            border-radius: Theme.r-md;
+                            background: root.density == choice ? Theme.accent-soft : Theme.surface-2;
+                            border-width: 1px;
+                            border-color: root.density == choice ? Theme.accent : transparent;
+                            TouchArea { mouse-cursor: pointer; clicked => { root.density-selected(choice); } }
+                            Text { text: choice == 0 ? "Compact" : choice == 1 ? "Cozy" : "Roomy"; font-size: 12.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                }
+                CheckBox {
+                    text: "Always two cards per row on phones";
+                    checked: root.mobile-two;
+                    toggled => { root.mobile-two-toggled(); }
+                }
+
+                // ---------- Behaviour ----------
+                Text { text: "NOTES BEHAVIOUR"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text { text: "Order by"; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; width: 54px; }
+                    for choice[i] in [0, 1, 2, 3]:
+                        Rectangle {
+                            height: 32px;
+                            horizontal-stretch: 1;
+                            border-radius: Theme.r-sm;
+                            background: root.sort == choice ? Theme.accent-soft : Theme.surface-2;
+                            TouchArea { mouse-cursor: pointer; clicked => { root.sort-selected(choice); } }
+                            Text { text: choice == 0 ? "Last edited" : choice == 1 ? "Created" : choice == 2 ? "Title A–Z" : "Manual"; font-size: 11.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                }
+                CheckBox { text: "Keep pinned notes in their own section"; checked: root.pinned-first; toggled => { root.pinned-first-toggled(); } }
+                CheckBox { text: "Render markdown inside cards"; checked: root.md-cards; toggled => { root.md-cards-toggled(); } }
+                CheckBox { text: "Show last-edited date on cards"; checked: root.show-dates; toggled => { root.show-dates-toggled(); } }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text { text: "Preview"; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; width: 54px; }
+                    for choice[i] in [3, 5, 8, 0]:
+                        Rectangle {
+                            height: 32px;
+                            horizontal-stretch: 1;
+                            border-radius: Theme.r-sm;
+                            background: root.clamp == choice ? Theme.accent-soft : Theme.surface-2;
+                            TouchArea { mouse-cursor: pointer; clicked => { root.clamp-selected(choice); } }
+                            Text { text: choice == 0 ? "Unlimited" : choice + " lines"; font-size: 11.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                }
+
+                // ---------- Markdown ----------
+                Text { text: "MARKDOWN"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Text { text: "[[Note title]] links notes together and drives the 3D graph."; font-size: 11.5px; color: Theme.text-dim; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextButton { label: "Markdown guide"; clicked => { root.markdown-guide(); } }
+                    TextButton { label: "Import .md"; clicked => { root.import-md(); } }
+                    TextButton { label: "Export all (.md)"; clicked => { root.export-all(); } }
+                }
+
+                // ---------- Security ----------
+                Text { text: "SECURITY"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    Rectangle {
+                        width: 42px;
+                        height: 42px;
+                        border-radius: 12px;
+                        background: root.vault-enabled ? Theme.accent-soft : Theme.surface-2;
+                        VerticalLayout { alignment: center; HorizontalLayout { alignment: center; if root.vault-enabled: IconLock { stroke-color: Theme.accent; preferred-width: 21px; preferred-height: 21px; } if !root.vault-enabled: IconUnlock { stroke-color: Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } } }
+                    }
+                    VerticalLayout {
+                        spacing: 2px;
+                        horizontal-stretch: 1;
+                        Text { text: root.vault-enabled ? "End-to-end encryption is on" : "Vault is not enabled"; font-size: 13px; font-weight: 650; color: Theme.text; }
+                        Text { text: root.vault-enabled ? "Titles, bodies, tags and attachments are AES-256-GCM encrypted on this device." : "Your notes are stored as plaintext until you set an encryption password."; font-size: 10.5px; color: Theme.text-dim; wrap: word-wrap; }
+                    }
+                }
+                if root.security-mode == 0 && !root.vault-enabled:
+                    TextButton { label: "Set encryption password"; emphasis: true; clicked => { root.security-mode = 1; root.security-error = ""; } }
+                if root.security-mode == 0 && root.vault-enabled:
+                    HorizontalLayout {
+                        spacing: 8px;
+                        TextButton { label: "Change password"; clicked => { root.security-mode = 2; root.security-error = ""; } }
+                        TextButton { label: "Reset password"; danger: true; clicked => { root.security-mode = 3; root.security-error = ""; } }
+                        TextButton { label: "Lock now"; clicked => { root.lock-now(); } }
+                    }
+                if root.security-mode == 1:
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Encrypt notes"; emphasis: true; clicked => { root.create-vault(root.new-password, root.confirm-password); } } } } }
+                if root.security-mode == 2:
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.current-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Change"; emphasis: true; clicked => { root.change-password(root.current-password, root.new-password); } } } } }
+                if root.security-mode == 3:
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } CheckBox { text: "I understand other devices lose access and there is no server-side recovery."; checked: root.reset-acknowledged; toggled => { root.reset-acknowledged = !root.reset-acknowledged; } } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Reset"; danger: true; clicked => { root.reset-password(root.new-password, root.confirm-password, root.reset-acknowledged); } } } } }
+
+                // ---------- Data ----------
+                Text { text: "DATA"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Text { text: root.stats-text; font-size: 11.5px; color: Theme.text-dim; wrap: word-wrap; }
+                TextButton { label: "Empty trash"; danger: true; clicked => { root.empty-trash(); } }
+
+                // ---------- About ----------
+                Text { text: "ABOUT"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                HorizontalLayout {
+                    spacing: 12px;
+                    Rectangle { width: 44px; height: 44px; border-radius: 12px; background: Theme.accent-soft; HorizontalLayout { alignment: center; IconGhost { stroke-color: Theme.accent; preferred-width: 26px; preferred-height: 26px; } } }
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text { text: "Notes · yellod suite"; font-size: 13px; font-weight: 650; color: Theme.text; }
+                        Text { text: "Version " + root.about-version + " · local-first, private by design"; font-size: 11px; color: Theme.text-faint; }
+                    }
+                }
+            }
+        }
+    }
+}

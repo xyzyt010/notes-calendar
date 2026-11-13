@@ -77,6 +77,7 @@ async fn list_notes(
         trashed: q.trashed.unwrap_or(false),
         favorites_only: q.favorites.unwrap_or(false),
         query: q.q.as_deref().filter(|s| !s.is_empty()),
+        sort: ycore::model::NotesSort::Updated,
         limit: q.limit.unwrap_or(500),
     };
     let db = state.db.lock().unwrap();

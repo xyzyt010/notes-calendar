@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.4"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.78"
 license = "MIT"
@@ -26,6 +26,14 @@ chrono = { version = "0.4", features = ["serde", "clock"] }
 
 # Storage
 rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid", "backup"] }
+
+# Crypto (vault encryption)
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+zeroize = "1"
 
 # UI
 slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "accessibility", "backend-winit", "backend-android-activity-06", "renderer-software"] }

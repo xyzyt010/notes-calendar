@@ -21,7 +21,8 @@ Plus Rust-based web front/backends under `web/` (axum), hosted on the VM
 ## Phases
 
 1. **Notes native app** — UI faithful to the notes.yellod.dpdns.org inspiration,
-   fully functional (markdown notes, search, tags, folders, favorites, offline-first). ✅ Done, verified on Windows.
+   fully functional (markdown notes, search, tags, folders, favorites, offline-first).
+   ✅ Done, verified on Windows; 1.1.0 adds the full vault/graph/markdown feature set.
 2. **CI/CD** — build matrix, artifacts, release drafts. ✅ Workflows green on `main` (macOS arm64 needs `macos-14` host for runner availability).
 3. **Calendar native app** — hour/day/week/month/year scopes, reminders, events, recurrence. ✅ Done, verified on Windows.
 4. **Web** — Rust (axum) static+API; calendar.yellod.dpdns.org with auth like notes.
@@ -36,7 +37,16 @@ white window with no error; Slint's GL fallback chain cannot engage because femt
 fails lazily. CPU rasterization renders correctly everywhere and is ample for flat
 note/calendar UIs. Android APKs keep the same configuration for consistency.
 
-## Deployment notes
+## Current status (1.1.0)
+
+- Native Notes implements the expanded feature set: composer, masonry UI, markdown
+  modes/previews, checklist mode, attachments, local PBKDF2 + AES-GCM vault,
+  wiki links/backlinks, graph projection, view styles, settings, and markdown
+  import/export.
+- CI and release workflows verify formatting/lint/tests and platform builds.
+- Public web deployment is intentionally calendar-only (`SUITE_DISABLE_NOTES=1`).
+
+
 
 - `suite-web` (Rust/axum) serves both web apps on `127.0.0.1:8760` on the VM.
 - The existing `notes.yellod.dpdns.org` deployment (wrangler on :8787) is untouched.

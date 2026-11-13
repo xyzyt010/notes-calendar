@@ -1,0 +1,74 @@
+// Built-in markdown cheat-sheet, including yellod's [[wiki link]] extension.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconX,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, TextButton,
+} from "../../shared-ui/components.slint";
+
+component GuideRow inherits HorizontalLayout {
+    in property <string> typed;
+    in property <string> seen;
+    spacing: 10px;
+    height: 30px;
+    Text { text: typed; font-family: "Inter"; font-size: 12px; color: Theme.accent; width: 230px; vertical-alignment: center; }
+    Text { text: seen; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; }
+}
+
+export component MarkdownGuide inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim;
+    callback closed();
+
+    TouchArea { clicked => { root.closed(); } }
+
+    card := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2 - 20px;
+        width: min(720px, parent.width - 36px);
+        height: min(620px, parent.height - 36px);
+        border-radius: Theme.r-xl;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        VerticalLayout {
+            padding: 22px;
+            spacing: 10px;
+            HorizontalLayout {
+                height: 32px;
+                Text { text: "Markdown guide"; font-size: 20px; font-weight: 650; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                IconButton { size: 32px; clicked => { root.closed(); } IconX { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            }
+            Text { text: "Type these anywhere. [[Title]] is not standard markdown — it links notes together and drives the graph."; font-size: 12px; color: Theme.text-dim; wrap: word-wrap; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: rows.preferred-height;
+                rows := VerticalLayout {
+                    spacing: 2px;
+                    GuideRow { typed: "# Heading 1"; seen: "Large section heading"; }
+                    GuideRow { typed: "## Heading 2"; seen: "Medium section heading"; }
+                    GuideRow { typed: "### Heading 3"; seen: "Small section heading"; }
+                    GuideRow { typed: "**bold**"; seen: "Bold text"; }
+                    GuideRow { typed: "*italic*"; seen: "Emphasised text"; }
+                    GuideRow { typed: "~~strike~~"; seen: "Struck-through text"; }
+                    GuideRow { typed: "`code`"; seen: "Inline code"; }
+                    GuideRow { typed: "``` code block ```"; seen: "Fenced code block"; }
+                    GuideRow { typed: "- item"; seen: "Unordered list"; }
+                    GuideRow { typed: "1. item"; seen: "Ordered list"; }
+                    GuideRow { typed: "- [ ] task"; seen: "Unchecked checklist item"; }
+                    GuideRow { typed: "- [x] task"; seen: "Checked checklist item"; }
+                    GuideRow { typed: "> quote"; seen: "Block quote"; }
+                    GuideRow { typed: "[label](https://example.com)"; seen: "Clickable link"; }
+                    GuideRow { typed: "[[Meeting notes]]"; seen: "Link to another note + graph edge"; }
+                    GuideRow { typed: "---"; seen: "Horizontal rule"; }
+                    GuideRow { typed: "![alt](image)"; seen: "Image (images attach as files)"; }
+                    GuideRow { typed: "#tag"; seen: "Tag chips in the editor"; }
+                }
+            }
+            HorizontalLayout { alignment: end; TextButton { label: "Close"; emphasis: true; clicked => { root.closed(); } } }
+        }
+    }
+}

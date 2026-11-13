@@ -13,13 +13,17 @@ import "../../assets/fonts/Inter-MediumItalic.ttf";
 export global Theme {
     // Master switch. Toggled from settings; everything derives from it.
     in-out property <bool> dark: true;
+    in-out property <bool> neo: false;
 
     // ---- Backgrounds (notes.yellod.dpdns.org dark / light) ----
-    out property <color> bg:            dark ? #121212 : #FFFFFF;
-    out property <color> surface:       dark ? #1B1B1B : #F1F3F4;  // top bar / drawer
-    out property <color> surface-2:     dark ? #2A2B2D : #F1F3F4;  // search pill / chips / hover base
-    out property <color> surface-3:     dark ? #2A2B2D : #E1E3E6;  // stronger hover / pressed
-    out property <color> card-bg:       dark ? #1F1F1F : #FFFFFF;  // cards & composer
+    out property <color> bg:            neo ? #17191D : (dark ? #121212 : #FFFFFF);
+    out property <color> surface:       neo ? #1D2025 : (dark ? #1B1B1B : #F1F3F4);
+    out property <color> surface-2:     neo ? #23262D : (dark ? #2A2B2D : #F1F3F4);
+    out property <color> surface-3:     neo ? #2A2D34 : (dark ? #2A2B2D : #E1E3E6);
+    out property <color> card-bg:       neo ? #1F2228 : (dark ? #1F1F1F : #FFFFFF);  // cards & composer
+    out property <color> neo-card:      #202329;
+    out property <color> neo-raised:    #23262D;
+    out property <color> neo-inset:     #14161A;
     out property <color> border:        dark ? #5F6368 : #DDDDDD;  // Keep card borders (light grey stroke)
     out property <color> border-strong: dark ? #5F6368 : #DDDDDD;
     out property <color> divider:       dark ? #2C2D2F : #E8EAED;  // hairline separators

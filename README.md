@@ -17,7 +17,7 @@ Built with [Slint](https://slint.dev) and native text rendering with proper DPI 
 
 ### Features (both apps)
 
-- **Notes**: FTS5 search, folders, tags, pin/favorite/archive/trash, auto-saving editor, word count, markdown-friendly, local SQLite.
+- **Notes**: FTS5 search, folders, tags, pin/favorite/archive/trash, auto-saving editor, word count, full markdown preview/checklists, image attachments with encrypted storage, note colors, doodle drawing, native Keep masonry / Notion rows / Obsidian vault / Neomorph / 3D-style graph views, encrypted local vault, wiki-link backlinks, import/export markdown, and local SQLite.
 - **Calendar**: day/week/month/year views, event creation/editing (reminders, recurrence, per-calendar colors), mini-month navigation, "upcoming events" panel.
 - Both apps: dark & light themes, Inter typeface embedded, Lucide-derived icons, per-app window icon.
 
@@ -51,6 +51,8 @@ SUITE_STATIC_DIR=./static SUITE_DB=./suite.db SUITE_BIND=127.0.0.1:8760 ./suite-
 
 Deployment on a VM with Cloudflare Tunnel: see `deploy/` (`suite-web.service`, `deploy.sh`). The web apps are designed to be reachable at e.g. `notes.example.com` / `calendar.example.com` behind `cloudflared` + reverse proxy.
 
+For calendar-only public deployment, run with `SUITE_DISABLE_NOTES=1`; Notes routes and API return 404 and `/notes.html` redirects to the calendar.
+
 Default login is `admin` / `admin` on first run — change it by setting `SUITE_ADMIN_PASSWORD_HASH` to a bcrypt hash of your password, e.g. `htpasswd -bnBC 12 admin 'your-password' | cut -d: -f2`.
 
 ## CI / CD
@@ -60,7 +62,7 @@ GitHub Actions (`.github/workflows/`):
 - **CI**: check, clippy, tests, workspace build on Linux/Windows/macOS
 - **Release**: on `v*` tags — matrix build for Linux x86_64 + aarch64 (gnu & musl), Windows x86_64 + arm64, macOS universal2, Android arm64 APK; SHA256SUMS + build provenance attestation
 
-The existing `notes.yellod.dpdns.org` site is a separate deployment; the web suite does not touch it.
+The existing `notes.yellod.dpdns.org` site is a separate deployment and remains untouched; `calendar.yellod.dpdns.org` is deployed calendar-only with `SUITE_DISABLE_NOTES=1`. The web suite does not operate the existing notes site.
 
 ## License
 

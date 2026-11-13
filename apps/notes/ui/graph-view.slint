@@ -1,0 +1,189 @@
+// Interactive 3D-projected note graph (rendered with Slint Paths and circles).
+// Drop a node on another to link them with [[Note title]].
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconExternalLink, IconX, IconLink2,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, GraphNodeData, GraphLinkData, TextButton,
+} from "../../shared-ui/components.slint";
+
+export component GraphView inherits Rectangle {
+    in property <[GraphNodeData]> nodes: [];
+    in property <[GraphLinkData]> links: [];
+    in-out property <bool> has-selection: false;
+    in property <string> selected-id: "";
+    in-out property <string> selected-title: "";
+    in property <string> selected-meta: "";
+    in property <styled-text> selected-markdown;
+    in-out property <[string]> selected-links: [];
+
+    callback graph-pointer-down(length, length, bool);
+    callback graph-pointer-move(length, length, bool);
+    callback graph-pointer-up(length, length, bool);
+    callback graph-wheel(length, bool);
+    callback relabel();
+    callback close-selection();
+    callback open-note();
+    callback unlink-all();
+    callback link-clicked(string);
+
+    background: Theme.bg;
+    clip: true;
+
+    graphTouch := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: root.has-selection ? default : crosshair;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.graph-pointer-down(self.mouse-x, self.mouse-y, event.modifiers.alt);
+                return EventResult.accept;
+            }
+            if event.kind == PointerEventKind.move {
+                if self.pressed { root.graph-pointer-move(self.mouse-x, self.mouse-y, event.modifiers.alt); }
+                return EventResult.accept;
+            }
+            if event.kind == PointerEventKind.up {
+                root.graph-pointer-up(self.mouse-x, self.mouse-y, event.modifiers.alt);
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
+        scroll-event(event) => {
+            root.graph-wheel(event.delta-y, event.modifiers.alt);
+            return EventResult.accept;
+        }
+    }
+
+    // links (behind nodes)
+    for link[i] in root.links:
+        Path {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            viewbox-width: parent.width / 1px;
+            viewbox-height: parent.height / 1px;
+            fit: preserve;
+            commands: link.commands;
+            stroke: link.active ? Theme.accent : Theme.text-faint;
+            stroke-width: link.active ? 2.5px : 1px;
+            fill: transparent;
+        }
+
+    // nodes
+    for node[i] in root.nodes:
+        Rectangle {
+            x: node.x - node.radius;
+            y: node.y - node.radius;
+            width: node.radius * 2;
+            height: node.radius * 2;
+            border-radius: self.width / 2;
+            background: node.active ? Theme.accent : (node.linked > 0 ? Theme.neo-raised : Theme.surface-3);
+            border-width: node.active ? 2px : 1px;
+            border-color: node.active ? Theme.on-accent : Theme.border-strong;
+            drop-shadow-blur: node.active ? 18px : 8px;
+            drop-shadow-color: node.active ? #FDD66366 : #00000055;
+            Text {
+                text: node.radius > 10px ? node.title : "";
+                font-size: 10px;
+                font-weight: node.active ? 700 : 500;
+                color: node.active ? Theme.on-accent : Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: no-wrap;
+                overflow: elide;
+                width: parent.width + 24px;
+                x: -12px;
+            }
+        }
+
+    Rectangle {
+        x: 18px;
+        y: parent.height - 48px;
+        height: 34px;
+        width: min(680px, parent.width - 36px);
+        border-radius: 17px;
+        background: Theme.surface-2;
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 8px;
+            spacing: 12px;
+            Text {
+                text: "drag to rotate · scroll to zoom · drop a node on another to link them · Alt+drop on empty space to unlink all · click to read, double-click to open";
+                font-size: 11px;
+                color: Theme.text-dim;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            TextButton { label: "Re-layout"; clicked => { root.relabel(); } }
+        }
+    }
+
+    if root.has-selection:
+        panel := Rectangle {
+            x: parent.width - 330px;
+            y: 18px;
+            width: 300px;
+            height: min(560px, parent.height - 36px);
+            border-radius: Theme.r-lg;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 30px;
+            drop-shadow-color: #00000070;
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+                HorizontalLayout {
+                    h := Text {
+                        text: root.selected-title == "" ? "Untitled" : root.selected-title;
+                        font-size: 17px;
+                        font-weight: 650;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                    IconButton { size: 30px; clicked => { root.close-selection(); } IconX { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+                }
+                Text {
+                    text: root.selected-meta;
+                    font-size: 10.5px;
+                    color: Theme.text-faint;
+                }
+                Rectangle { height: 1px; background: Theme.border; }
+                Flickable {
+                    preferred-height: 260px;
+                    content-height: preview.preferred-height;
+                    preview := StyledText {
+                        text: root.selected-markdown;
+                        default-color: Theme.text;
+                        link-color: Theme.accent;
+                        default-font-size: 12px;
+                    }
+                }
+                Text { text: "LINKS"; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
+                Flickable {
+                    preferred-height: 92px;
+                    content-height: linksColumn.preferred-height;
+                    linksColumn := VerticalLayout {
+                        spacing: 3px;
+                        for link[i] in root.selected-links:
+                            TextButton { label: "[[" + link + "]]"; clicked => { root.link-clicked(link); } }
+                        if root.selected-links.length == 0:
+                            Text { text: "No links yet — drop this node on another to connect them."; font-size: 11px; color: Theme.text-faint; wrap: word-wrap; }
+                    }
+                }
+                Rectangle {}
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextButton { label: "Open note"; emphasis: true; clicked => { root.open-note(); } }
+                    TextButton { label: "Unlink all"; danger: true; clicked => { root.unlink-all(); } }
+                }
+            }
+        }
+}

@@ -1,12 +1,16 @@
-// Editor pane for yellod Notes. Single component, fully property-driven.
+// Editor pane for yellod Notes. Keep-style chrome + markdown modes, checklist,
+// encrypted attachments, find-in-note and timestamps.
 
 import { Theme } from "../../shared-ui/theme.slint";
+import { CheckBox } from "std-widgets.slint";
 import {
     IconChevronLeft, IconPin, IconStar, IconArchive, IconArchiveArrowUp, IconTrash,
     IconUndo2, IconCopy, IconFolder, IconX, IconCircleCheck, IconDroplet,
+    IconImage, IconPencil, IconSquareCheck, IconFileText, IconSearch,
+    IconChevronUp, IconChevronDown, IconDownload,
 } from "../../shared-ui/icons.slint";
 import {
-    IconButton, FolderData,
+    IconButton, FolderData, NoteImageData, ChecklistItemData, TextButton,
 } from "../../shared-ui/components.slint";
 
 export component EditorPane inherits Rectangle {
@@ -24,6 +28,19 @@ export component EditorPane inherits Rectangle {
     in-out property <bool> folder-menu-open: false;
     in-out property <bool> color-popover-open: false;
     in-out property <int> current-color-index: 0;
+    in-out property <[NoteImageData]> current-images: [];
+    in-out property <[ChecklistItemData]> checklist-items: [];
+    in property <styled-text> editor-markdown;
+    in property <[string]> editor-links: [];
+    in-out property <int> mode: 0;                 // 0 write · 1 split · 2 read
+    in-out property <bool> checklist-mode: false;
+    in-out property <bool> find-open: false;
+    in-out property <string> find-query: "";
+    in-out property <int> find-count: 0;
+    in-out property <int> find-index: 0;
+    in-out property <int> find-selection-offset: 0;
+    in-out property <int> find-selection-length: 0;
+    in-out property <int> find-selection-token: 0;
 
     // ---- in state ----
     in property <bool> compact: false;
@@ -41,184 +58,265 @@ export component EditorPane inherits Rectangle {
     callback restore();
     callback delete-forever();
     callback copy-note();
+    callback export-note();
+    callback show-timestamps();
     callback tag-added(string);
     callback tag-removed(string);
     callback assign-folder(string);
     callback back();
     callback color-picked(int);
+    callback image-requested();
+    callback draw-requested();
+    callback image-preview(string);
+    callback image-delete(string);
+    callback checklist-toggle();
+    callback checklist-add(string);
+    callback checklist-toggle-item(int);
+    callback checklist-edit-item(int, string);
+    callback checklist-remove-item(int);
+    callback link-clicked(string);
+    callback find-changed();
+    callback find-next();
+    callback find-previous();
+    callback close-find();
 
     background: Theme.bg;
+
+    changed find-selection-token => {
+        bodyInput.set-selection-offsets(root.find-selection-offset, root.find-selection-offset + root.find-selection-length);
+        bodyInput.focus();
+    }
 
     VerticalLayout {
         // ===== Header icon row =====
         HorizontalLayout {
-            height: 56px;
-            padding-left: 8px;
-            padding-right: 14px;
-            spacing: 2px;
+            height: 45px;
+            padding-left: 4px;
+            padding-right: 6px;
+            spacing: 1px;
 
             if root.compact:
-                IconButton { size: 38px; clicked => { root.back(); } IconChevronLeft { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; } }
+                IconButton { size: 32px; clicked => { root.back(); } IconChevronLeft { stroke-color: Theme.text-dim; preferred-width: 21px; preferred-height: 21px; } }
 
-            // Folder assign
             folderbtn := IconButton {
-                size: 38px;
+                size: 32px;
                 clicked => { root.folder-menu-open = !root.folder-menu-open; }
-                IconFolder { stroke-color: root.current-folder == "" ? Theme.text-dim : Theme.accent; preferred-width: 20px; preferred-height: 20px; }
+                IconFolder { stroke-color: root.current-folder == "" ? Theme.text-dim : Theme.accent; preferred-width: 17px; preferred-height: 17px; }
             }
-
-            // Note color
             palettebtn := IconButton {
-                size: 38px;
+                size: 32px;
                 clicked => { root.color-popover-open = !root.color-popover-open; }
-                IconDroplet { stroke-color: root.current-color-index != 0 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
+                IconDroplet { stroke-color: root.current-color-index != 0 ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
+            }
+            IconButton { size: 32px; clicked => { root.image-requested(); } IconImage { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            IconButton { size: 32px; clicked => { root.draw-requested(); } IconPencil { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+            IconButton { selected: root.checklist-mode; size: 32px; clicked => { root.checklist-toggle(); } IconSquareCheck { stroke-color: root.checklist-mode ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            IconButton { size: 32px; clicked => { root.find-open = !root.find-open; } IconSearch { stroke-color: root.find-open ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            HorizontalLayout {
+                width: 112px;
+                height: 28px;
+                spacing: 2px;
+                for choice[i] in [0, 1, 2]:
+                    Rectangle {
+                        width: 36px;
+                        border-radius: 14px;
+                        background: root.mode == choice ? Theme.accent-soft : transparent;
+                        TouchArea { mouse-cursor: pointer; clicked => { root.mode = choice; } }
+                        Text { text: choice == 0 ? "Write" : choice == 1 ? "Split" : "Read"; font-size: 10px; font-weight: 600; color: Theme.text-dim; horizontal-alignment: center; vertical-alignment: center; }
+                    }
             }
 
-            Rectangle {} // spring
+            Rectangle { width: 20px; } // fixed spacer
 
             if !root.in-trash:
-                IconButton { selected: root.editor-pinned; size: 38px; clicked => { root.toggle-pin(); }
-                    IconPin { stroke-color: root.editor-pinned ? Theme.accent : Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
-                IconButton { selected: root.editor-favorite; size: 38px; clicked => { root.toggle-favorite(); }
-                    IconStar { stroke-color: root.editor-favorite ? Theme.accent : Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
-                IconButton { size: 38px; clicked => { root.toggle-archive(); }
-                    if root.in-archive:
-                        IconArchiveArrowUp { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; }
-                    if !root.in-archive:
-                        IconArchive { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
-                IconButton { size: 38px; clicked => { root.copy-note(); }
-                    IconCopy { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
-                IconButton { size: 38px; clicked => { root.toggle-trash(); }
-                    IconTrash { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { selected: root.editor-pinned; size: 32px; clicked => { root.toggle-pin(); } IconPin { stroke-color: root.editor-pinned ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            if !root.in-trash:
+                IconButton { selected: root.editor-favorite; size: 32px; clicked => { root.toggle-favorite(); } IconStar { stroke-color: root.editor-favorite ? Theme.accent : Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
+            if !root.in-trash:
+                IconButton { size: 32px; clicked => { root.toggle-archive(); } if root.in-archive: IconArchiveArrowUp { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } if !root.in-archive: IconArchive { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+            if !root.in-trash:
+                IconButton { size: 32px; clicked => { root.copy-note(); } IconCopy { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+            if !root.in-trash:
+                IconButton { size: 32px; clicked => { root.toggle-trash(); } IconTrash { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; } }
+            TextButton { label: "Close"; emphasis: true; width: 76px; clicked => { root.back(); } }
 
             if root.in-trash:
-                IconButton { size: 38px; clicked => { root.restore(); }
-                    IconUndo2 { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
-                IconButton { size: 38px; danger: true; clicked => { root.delete-forever(); }
-                    IconTrash { stroke-color: Theme.danger; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { size: 32px; clicked => { root.restore(); } IconUndo2 { stroke-color: Theme.text-dim; preferred-width: 18px; preferred-height: 18px; } }
+            if root.in-trash:
+                IconButton { size: 32px; danger: true; clicked => { root.delete-forever(); } IconTrash { stroke-color: Theme.danger; preferred-width: 16px; preferred-height: 16px; } }
+
         }
 
+        // ===== Find in note =====
+        if root.find-open:
+            Rectangle {
+                height: 38px;
+                background: Theme.surface-2;
+                HorizontalLayout {
+                    padding-left: 18px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    IconSearch { stroke-color: Theme.text-faint; preferred-width: 15px; preferred-height: 15px; }
+                    TextInput {
+                        text <=> root.find-query;
+                        font-size: 12.5px;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        selection-background-color: Theme.accent-soft;
+                        edited => { root.find-changed(); }
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: root.find-query == "" ? "" : (root.find-count == 0 ? "No matches" : (root.find-index + 1) + " / " + root.find-count);
+                        font-size: 11px;
+                        color: Theme.text-faint;
+                        vertical-alignment: center;
+                    }
+                    IconButton { size: 28px; clicked => { root.find-previous(); } IconChevronUp { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                    IconButton { size: 28px; clicked => { root.find-next(); } IconChevronDown { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                    IconButton { size: 28px; clicked => { root.close-find(); } IconX { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                }
+            }
+
         // ===== Title =====
-        titleArea := Rectangle {
-            height: 54px;
-            titleInput := TextInput {
+        Rectangle {
+            height: 50px;
+            titleArea := Rectangle {
                 x: 20px;
                 width: parent.width - 40px;
                 height: 100%;
-                single-line: true;
-                font-size: 26px;
-                font-weight: 600;
-                letter-spacing: -0.3px;
-                color: Theme.text;
-                vertical-alignment: center;
-                selection-background-color: Theme.accent-soft;
-                selection-foreground-color: Theme.text;
-                text <=> root.editor-title;
-                edited => { root.content-changed(); }
-            }
-            if root.editor-title == "":
-                Text {
-                    x: 20px;
-                    width: parent.width - 40px;
+                titleInput := TextInput {
+                    width: 100%;
                     height: 100%;
+                    single-line: true;
+                    font-size: 25px;
+                    font-weight: 620;
+                    letter-spacing: -0.3px;
+                    color: Theme.text;
                     vertical-alignment: center;
-                    text: "Title";
-                    font-size: 26px;
-                    font-weight: 600;
-                    color: Theme.text-faint;
-                    wrap: no-wrap;
+                    selection-background-color: Theme.accent-soft;
+                    selection-foreground-color: Theme.text;
+                    text <=> root.editor-title;
+                    edited => { root.content-changed(); }
                 }
+                if root.editor-title == "":
+                    Text { width: 100%; height: 100%; vertical-alignment: center; text: "Title"; font-size: 25px; font-weight: 620; color: Theme.text-faint; wrap: no-wrap; }
+            }
         }
 
-        // ===== Tags row =====
+        // ===== tags row =====
         Rectangle {
-            height: 34px;
+            height: 32px;
             HorizontalLayout {
                 x: 20px;
                 width: parent.width - 40px;
                 height: 100%;
                 spacing: 6px;
-
                 for tag[i] in root.editor-tags:
                     Rectangle {
-                        height: 24px;
-                        y: 5px;
+                        height: 23px;
+                        y: 4px;
                         border-radius: 8px;
                         background: Theme.accent-soft;
-                        width: chipText.preferred-width + 32px;
+                        width: chipText.preferred-width + 29px;
                         HorizontalLayout {
-                            x: 0;
-                            y: 0;
-                            width: 100%;
-                            height: 100%;
-                            padding-left: 9px;
-                            padding-right: 2px;
-                            spacing: 2px;
-                            chipText := Text {
-                                text: "#" + tag;
-                                font-size: 11.5px;
-                                font-weight: 600;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                            }
-                            xbtn := Rectangle {
+                            padding-left: 4px;
+                            padding-right: 1px;
+                            spacing: 1px;
+                            chipText := Text { text: "#" + tag; font-size: 11px; font-weight: 600; color: Theme.accent; vertical-alignment: center; }
+                            TouchArea {
                                 width: 17px;
                                 height: 17px;
                                 y: 3px;
-                                border-radius: 8px;
-                                background: removeTouch.has-hover ? Theme.accent-soft : transparent;
-                                removeTouch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.tag-removed(tag); }
-                                }
-                                VerticalLayout {
-                                    alignment: center;
-                                    HorizontalLayout {
-                                        alignment: center;
-                                        IconX { stroke-color: Theme.accent; preferred-width: 11px; preferred-height: 11px; }
-                                    }
-                                }
+                                mouse-cursor: pointer;
+                                clicked => { root.tag-removed(tag); }
+                                Text { text: "×"; font-size: 15px; color: Theme.accent; horizontal-alignment: center; vertical-alignment: center; }
                             }
                         }
                     }
-
                 tagArea := Rectangle {
-                    height: 24px;
-                    y: 5px;
-                    width: 110px;
+                    height: 23px;
+                    y: 4px;
+                    width: 116px;
                     tagInput := TextInput {
                         width: 100%;
                         height: 100%;
                         single-line: true;
-                        font-size: 11.5px;
+                        font-size: 11px;
                         font-weight: 600;
                         color: Theme.text;
                         vertical-alignment: center;
                         selection-background-color: Theme.accent-soft;
                         key-pressed(event) => {
-                            if event.text == "\n" || event.text == " " || event.text == "," {
-                                root.tag-added(self.text);
-                                self.text = "";
-                                return accept;
-                            }
+                            if event.text == "\n" || event.text == " " || event.text == "," { root.tag-added(self.text); self.text = ""; return accept; }
                             reject
                         }
                     }
                     if tagInput.text == "":
-                        Text {
-                            x: 2px;
-                            height: 100%;
-                            vertical-alignment: center;
-                            text: "+ Add tag";
-                            font-size: 11.5px;
-                            font-weight: 500;
-                            color: Theme.text-faint;
-                        }
+                        Text { x: 2px; height: 100%; vertical-alignment: center; text: "+ Add tag"; font-size: 11px; font-weight: 500; color: Theme.text-faint; }
                 }
             }
         }
 
-        // ===== Body =====
+        // ===== attachments =====
+        if root.current-images.length > 0:
+            Rectangle {
+                height: 108px;
+                Rectangle { y: 0; width: parent.width; height: 1px; background: Theme.border; }
+                Flickable {
+                    x: 0; y: 1px; width: parent.width; height: parent.height - 1px;
+                    content-width: imageStrip.preferred-width;
+                    content-height: self.height;
+                    imageStrip := HorizontalLayout {
+                        padding-left: 20px;
+                        padding-top: 7px;
+                        padding-bottom: 7px;
+                        spacing: 8px;
+                        for image[i] in root.current-images:
+                            Rectangle {
+                                width: 118px;
+                                height: 94px;
+                                border-radius: Theme.r-sm;
+                                background: Theme.surface-2;
+                                clip: true;
+                                Image {
+                                    source: image.thumbnail;
+                                    width: 100%;
+                                    height: 100%;
+                                    image-fit: cover;
+                                }
+                                TouchArea {
+                                    width: 100%;
+                                    height: 100%;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.image-preview(image.id); }
+                                }
+                                IconButton {
+                                    x: parent.width - 25px;
+                                    y: 3px;
+                                    size: 22px;
+                                    clicked => { root.image-delete(image.id); }
+                                    IconTrash { stroke-color: #ffffff; preferred-width: 12px; preferred-height: 12px; }
+                                }
+                                Rectangle {
+                                    x: 0px; y: parent.height - 17px; width: parent.width; height: 17px;
+                                    background: #00000090;
+                                    Text {
+                                        x: 4px; y: 0; width: parent.width - 8px; height: 100%;
+                                        text: image.name;
+                                        font-size: 9px;
+                                        color: #ffffff;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+
+        // ===== body / read modes =====
         Rectangle {
             vertical-stretch: 1;
             Rectangle { height: 1px; width: parent.width; y: 0; background: Theme.border; }
@@ -227,41 +325,103 @@ export component EditorPane inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 content-width: self.width;
-                content-height: bodyInput.preferred-height + 140px;
+                content-height: bodyArea.preferred-height + 150px;
 
-                bodyInput := TextInput {
-                    x: 20px;
-                    y: 12px;
-                    width: parent.width - 40px;
-                    single-line: false;
-                    wrap: word-wrap;
-                    font-size: 15px;
-                    color: Theme.text;
-                    selection-background-color: Theme.accent-soft;
-                    selection-foreground-color: Theme.text;
-                    text <=> root.editor-body;
-                    edited => { root.content-changed(); }
-                }
-
-                TouchArea {
-                    // tap below text to focus body
+                bodyArea := VerticalLayout {
                     x: 0;
-                    y: bodyInput.preferred-height;
+                    y: 0;
                     width: parent.width;
-                    height: 200px;
-                    clicked => { bodyInput.focus(); }
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    spacing: 10px;
+
+                    bodyInput := TextInput {
+                        visible: root.mode != 2 && !root.checklist-mode;
+                        width: parent.width - 40px;
+                        height: root.mode == 2 || root.checklist-mode ? 0px : 240px;
+                        single-line: false;
+                        wrap: word-wrap;
+                        font-size: 15px;
+                        color: Theme.text;
+                        selection-background-color: Theme.accent-soft;
+                        selection-foreground-color: Theme.text;
+                        text <=> root.editor-body;
+                        edited => { root.content-changed(); }
+                    }
+                    if root.mode != 0 && !root.checklist-mode:
+                        Rectangle {
+
+                            width: parent.width - 40px;
+                            if root.mode == 1:
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    width: 1px;
+                                    height: parent.height;
+                                    background: Theme.border;
+                                }
+                            StyledText {
+                                x: root.mode == 1 ? 14px : 0px;
+                                width: parent.width - (root.mode == 1 ? 14px : 0px);
+                                text: root.editor-markdown;
+                                default-color: Theme.text;
+                                link-color: Theme.accent;
+                                default-font-size: 15px;
+                                link-clicked(link) => { root.link-clicked(link); }
+                            }
+                        }
+                    if root.checklist-mode:
+                        checklistColumn := VerticalLayout {
+
+                            width: parent.width - 40px;
+                            spacing: 4px;
+                            for item[i] in root.checklist-items:
+                                Rectangle {
+                                    height: 32px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CheckBox { checked: item.checked; toggled => { root.checklist-toggle-item(item.line); } }
+                                        TextInput {
+                                            text: item.text;
+                                            font-size: 13.5px;
+                                            color: item.checked ? Theme.text-faint : Theme.text;
+                                            vertical-alignment: center;
+                                            edited => { root.checklist-edit-item(item.line, self.text); }
+                                            horizontal-stretch: 1;
+                                        }
+                                        IconButton { size: 26px; clicked => { root.checklist-remove-item(item.line); } IconTrash { stroke-color: Theme.danger; preferred-width: 14px; preferred-height: 14px; } }
+                                    }
+                                }
+                            HorizontalLayout {
+                                height: 32px;
+                                spacing: 8px;
+                                Rectangle { width: 24px; }
+                                TextInput {
+                                    font-size: 13px;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                    key-pressed(event) => {
+                                        if event.text == "\n" { root.checklist-add(self.text); self.text = ""; return accept; }
+                                        reject
+                                    }
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                    if root.editor-links.length > 0:
+                        HorizontalLayout {
+
+                            spacing: 6px;
+                            Text { text: "LINKS"; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; vertical-alignment: center; }
+                            for link[i] in root.editor-links:
+                                TextButton { label: "[[" + link + "]]"; clicked => { root.link-clicked(link); } }
+                        }
                 }
             }
 
-            if root.editor-body == "":
-                Text {
-                    x: 20px;
-                    y: 12px;
-                    width: parent.width - 40px;
-                    text: "Start typing…  Markdown is supported.";
-                    font-size: 15px;
-                    color: Theme.text-faint;
-                }
+            if root.editor-body == "" && !root.checklist-mode:
+                Text { x: 20px; width: parent.width - 40px; text: "Start typing…  Markdown is supported."; font-size: 15px; color: Theme.text-faint; }
         }
 
         // ===== Footer =====
@@ -274,57 +434,38 @@ export component EditorPane inherits Rectangle {
                 width: parent.width - 40px;
                 height: 100%;
                 spacing: 8px;
-                Text {
-                    text: root.word-count + " words";
-                    font-size: 11.5px;
-                    color: Theme.text-faint;
-                    vertical-alignment: center;
-                }
-                Rectangle {} // spring
+                Text { text: root.word-count + " words"; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
+                Rectangle { width: 1px; height: 14px; background: Theme.border; }
+                Text { text: "Write · Split · Read"; font-size: 10.5px; color: Theme.text-faint; vertical-alignment: center; }
+                Rectangle {}
                 if root.save-state == 1:
-                    Text {
-                        text: "Saving…";
-                        font-size: 11.5px;
-                        color: Theme.text-faint;
-                        vertical-alignment: center;
-                    }
+                    Text { text: "Saving…"; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
                 if root.save-state == 2:
                     HorizontalLayout {
                         spacing: 4px;
-                        VerticalLayout {
-                            alignment: center;
-                            IconCircleCheck { stroke-color: Theme.success; preferred-width: 13px; preferred-height: 13px; }
-                        }
-                        Text {
-                            text: "Saved";
-                            font-size: 11.5px;
-                            font-weight: 600;
-                            color: Theme.success;
-                            vertical-alignment: center;
-                        }
+                        VerticalLayout { alignment: center; IconCircleCheck { stroke-color: Theme.success; preferred-width: 13px; preferred-height: 13px; } }
+                        Text { text: "Saved"; font-size: 11px; font-weight: 600; color: Theme.success; vertical-alignment: center; }
                     }
                 if root.save-state != 1 && root.edited-label != "":
-                    Text {
-                        text: "·  " + root.edited-label;
-                        font-size: 11.5px;
-                        color: Theme.text-faint;
-                        vertical-alignment: center;
-                    }
+                    Text { text: "·  " + root.edited-label; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
+                TextButton { label: "Timestamps"; clicked => { root.show-timestamps(); } }
+                TextButton { label: "Export .md"; clicked => { root.export-note(); } }
+                TextButton { label: "Close"; emphasis: true; clicked => { root.back(); } }
             }
         }
+
     }
 
-    // ===== Color swatch popover (absolute overlay) =====
+    // ===== Color swatch popover =====
     if root.color-popover-open:
         Rectangle {
             width: 100%;
             height: 100%;
             TouchArea { clicked => { root.color-popover-open = false; } }
-
             Rectangle {
                 x: root.compact ? 46px : 94px;
                 y: 58px;
-                width: 284px;
+                width: 278px;
                 height: 46px;
                 background: Theme.surface-2;
                 border-radius: 23px;
@@ -335,37 +476,27 @@ export component EditorPane inherits Rectangle {
                 drop-shadow-color: #00000060;
                 HorizontalLayout {
                     x: 8px;
-                    y: 8px;
+
                     width: parent.width - 16px;
                     height: 30px;
                     spacing: 5px;
                     for idx[i] in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
                         swatch := TouchArea {
-                            width: 22px;
+                            width: 20px;
                             height: 30px;
                             clicked => { root.color-picked(idx); root.color-popover-open = false; }
-                            Rectangle {
-                                x: 0;
-                                y: 0;
-                                width: 22px;
-                                height: 30px;
-                                border-radius: 6px;
-                                background: Theme.note-color(idx);
-                                border-width: root.current-color-index == idx ? 2px : 1px;
-                                border-color: root.current-color-index == idx ? Theme.accent : Theme.border-strong;
-                            }
+                            Rectangle { width: 20px; height: 30px; border-radius: 6px; background: Theme.note-color(idx); border-width: root.current-color-index == idx ? 2px : 1px; border-color: root.current-color-index == idx ? Theme.accent : Theme.border-strong; }
                         }
                 }
             }
         }
 
-    // ===== Folder dropdown (absolute overlay) =====
+    // ===== Folder dropdown =====
     if root.folder-menu-open:
         Rectangle {
             width: 100%;
             height: 100%;
             TouchArea { clicked => { root.folder-menu-open = false; } }
-
             Rectangle {
                 x: root.compact ? 8px : 56px;
                 y: 58px;
@@ -377,33 +508,20 @@ export component EditorPane inherits Rectangle {
                 border-color: Theme.border-strong;
                 drop-shadow-blur: 24px;
                 drop-shadow-color: #00000055;
-
                 menuLayout := VerticalLayout {
                     padding: 8px;
                     spacing: 2px;
                     HorizontalLayout {
-                        padding-left: 8px;
+                        padding-left: 4px;
                         padding-top: 2px;
                         padding-bottom: 2px;
-                        Text {
-                            text: "MOVE TO FOLDER";
-                            font-size: 10.5px;
-                            font-weight: 700;
-                            letter-spacing: 1px;
-                            color: Theme.text-faint;
-                        }
+                        Text { text: "MOVE TO FOLDER"; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
                     }
                     noFolderRow := TouchArea {
                         height: 36px;
                         clicked => { root.assign-folder(""); }
                         Rectangle { border-radius: Theme.r-sm; background: noFolderRow.has-hover ? Theme.surface-2 : transparent; }
-                        HorizontalLayout {
-                            x: 8px;
-                            y: 0;
-                            width: 100%;
-                            height: 100%;
-                            Text { text: "No folder"; font-size: 13px; color: Theme.text; vertical-alignment: center; }
-                        }
+                        HorizontalLayout { x: 8px; width: 100%; height: 100%; Text { text: "No folder"; font-size: 13px; color: Theme.text; vertical-alignment: center; } }
                     }
                     for folder[f] in root.folders:
                         folderRow := TouchArea {
@@ -412,7 +530,6 @@ export component EditorPane inherits Rectangle {
                             Rectangle { border-radius: Theme.r-sm; background: folderRow.has-hover ? Theme.surface-2 : transparent; }
                             HorizontalLayout {
                                 x: 8px;
-                                y: 0;
                                 width: 100%;
                                 height: 100%;
                                 spacing: 8px;

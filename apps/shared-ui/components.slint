@@ -2,7 +2,7 @@
 
 import { Theme } from "theme.slint";
 import {
-    IconSearch, IconX, IconPin, IconGhost,
+    IconSearch, IconX, IconPin, IconGhost, IconChevronUp, IconChevronDown,
 } from "icons.slint";
 
 // ---------- Data ----------
@@ -15,6 +15,46 @@ export struct NoteData {
     favorite: bool,
     word-count: int,
     color-index: int,
+    image-count: int,
+    card-height: length,
+    render-md: bool,
+    preview-styled: styled-text,
+}
+
+export struct ChecklistItemData {
+    line: int,
+    text: string,
+    checked: bool,
+}
+
+export struct NoteImageData {
+    id: string,
+    name: string,
+    size-label: string,
+    thumbnail: image,
+}
+
+export struct GraphNodeData {
+    id: string,
+    title: string,
+    x: length,
+    y: length,
+    radius: length,
+    linked: int,
+    active: bool,
+}
+
+export struct GraphLinkData {
+    id: string,
+    commands: string,
+    active: bool,
+}
+
+export struct DoodleStrokeData {
+    id: int,
+    color: color,
+    size: length,
+    commands: string,
 }
 
 export struct FolderData {
@@ -64,7 +104,7 @@ export component RailButton inherits Rectangle {
     callback clicked();
 
     width: Theme.rail-width;
-    height: 60px;
+    height: 44px;
 
     box := Rectangle {
         x: 6px;
@@ -92,7 +132,7 @@ export component RailButton inherits Rectangle {
             }
             Text {
                 text: root.label;
-                font-size: 10.5px;
+                font-size: 9px;
                 font-weight: 500;
                 color: root.selected ? Theme.accent : Theme.text-dim;
                 horizontal-alignment: center;
@@ -168,12 +208,15 @@ export component SidebarRow inherits Rectangle {
 export component SearchBar inherits Rectangle {
     in-out property <string> text <=> input.text;
     in property <string> placeholder: "Search your notes";
+    in-out property <int> focus-token: 0;
     callback submitted();
     callback cleared();
 
     public function input-focus() {
         input.focus();
     }
+
+    changed focus-token => { input.focus(); }
 
     height: 44px;
     border-radius: Theme.r-xl;
@@ -290,21 +333,26 @@ export component Input inherits Rectangle {
 export component NoteCard inherits Rectangle {
     in property <NoteData> note;
     in property <bool> compact: false;
+    in property <int> preview-lines: 5;
+    in property <bool> show-date: true;
     in-out property <bool> selected: false;
+    in property <bool> manual-reorder: false;
     callback clicked();
     callback pin-toggled();
     callback favorite-toggled();
+    callback move-up();
+    callback move-down();
 
-    height: root.compact ? 118px : 190px;
+    height: root.compact ? 132px : root.note.card-height;
     border-radius: Theme.r-lg;
-    background: Theme.note-color(root.note.color-index);
-    border-width: 1px;
+    background: Theme.neo ? Theme.neo-card : Theme.note-color(root.note.color-index);
+    border-width: Theme.neo ? 0px : 1px;
     border-color: root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border);
     animate background { duration: 130ms; }
     animate border-color { duration: 130ms; }
-    drop-shadow-blur: 18px;
-    drop-shadow-offset-y: 3px;
-    drop-shadow-color: #00000038;
+    drop-shadow-blur: Theme.neo ? 26px : 18px;
+    drop-shadow-offset-y: Theme.neo ? 8px : 3px;
+    drop-shadow-color: Theme.neo ? #00000090 : #00000038;
 
     ta := TouchArea {
         mouse-cursor: pointer;
@@ -333,30 +381,52 @@ export component NoteCard inherits Rectangle {
             }
         }
 
-        Text {
-            text: root.note.preview;
-            font-size: 13px;
-            font-weight: 400;
-            color: Theme.text-dim;
-            wrap: word-wrap;
-            overflow: elide;
-            max-height: root.height - 84px;
-            vertical-alignment: top;
-        }
+        if root.note.render-md:
+            StyledText {
+                text: root.note.preview-styled;
+                default-font-size: 13px;
+                default-color: Theme.text-dim;
+                link-color: Theme.accent;
+                max-lines: root.preview-lines <= 0 ? 0 : root.preview-lines;
+            }
+        if !root.note.render-md:
+            Text {
+                text: root.note.preview;
+                font-size: 13px;
+                font-weight: 400;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+                overflow: elide;
+                max-height: root.height - 88px;
+                vertical-alignment: top;
+            }
 
         Rectangle {} // spring
 
         HorizontalLayout {
             spacing: 8px;
 
-            Text {
-                text: root.note.date-label;
-                font-size: 11px;
-                color: Theme.text-faint;
-                vertical-alignment: center;
-            }
+            if root.show-date:
+                Text {
+                    text: root.note.date-label;
+                    font-size: 11px;
+                    color: Theme.text-faint;
+                    vertical-alignment: center;
+                }
+
+            if root.note.image-count > 0:
+                Text {
+                    text: root.note.image-count + " image" + (root.note.image-count == 1 ? "" : "s");
+                    font-size: 11px;
+                    color: Theme.text-faint;
+                    vertical-alignment: center;
+                }
 
             Rectangle {} // spring
+
+            if root.manual-reorder:
+                IconButton { size: 24px; clicked => { root.move-up(); } IconChevronUp { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+                IconButton { size: 24px; clicked => { root.move-down(); } IconChevronDown { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
 
             // Pin button — visible on hover or when pinned
             IconButton {

@@ -1,0 +1,216 @@
+// Obsidian-style vault view: searchable note list + markdown reading pane.
+
+import { Theme } from "../../shared-ui/theme.slint";
+import {
+    IconPin, IconPencil, IconExternalLink, IconSearch, IconPlus,
+} from "../../shared-ui/icons.slint";
+import {
+    IconButton, NoteData, TextButton,
+} from "../../shared-ui/components.slint";
+
+export component VaultView inherits Rectangle {
+    in-out property <string> filter: "";
+    in-out property <bool> source-mode: false;
+    in-out property <[NoteData]> notes: [];
+    in property <string> selected-id: "";
+    in property <bool> has-note: false;
+    in-out property <string> doc-title: "";
+    in-out property <string> doc-meta: "";
+    in property <styled-text> doc-markdown;
+    in-out property <string> doc-source: "";
+    in-out property <[string]> links-out: [];
+    in-out property <[string]> backlinks: [];
+    in property <bool> pinned: false;
+
+    callback filter-changed(string);
+    callback note-selected(string);
+    callback new-note();
+    callback pin-toggled();
+    callback edit-source();
+    callback source-edited();
+    callback open-note();
+    callback link-clicked(string);
+    callback title-edited(string);
+
+    background: Theme.bg;
+
+    HorizontalLayout {
+        // ===== List sidebar =====
+        Rectangle {
+            width: 286px;
+            background: Theme.surface;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                HorizontalLayout {
+                    height: 36px;
+                    Text { text: "Vault"; font-size: 18px; font-weight: 600; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                    IconButton { size: 32px; clicked => { root.new-note(); } IconPlus { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+                }
+                Rectangle {
+                    height: 38px;
+                    border-radius: Theme.r-md;
+                    background: Theme.surface-2;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 8px;
+                        spacing: 8px;
+                        VerticalLayout { alignment: center; IconSearch { stroke-color: Theme.text-faint; preferred-width: 16px; preferred-height: 16px; } }
+                        TextInput {
+                            text <=> root.filter;
+                            font-size: 13px;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            selection-background-color: Theme.accent-soft;
+                            edited => { root.filter-changed(self.text); }
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+                Flickable {
+                    vertical-stretch: 1;
+                    content-width: self.width;
+                    content-height: listColumn.preferred-height;
+                    listColumn := VerticalLayout {
+                        spacing: 4px;
+                        for note[i] in root.notes:
+                            row := Rectangle {
+                                height: 76px;
+                                border-radius: Theme.r-md;
+                                background: note.id == root.selected-id ? Theme.accent-soft : (rowTouch.has-hover ? Theme.surface-2 : transparent);
+                                rowTouch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.note-selected(note.id); }
+                                }
+                                VerticalLayout {
+                                    padding-left: 11px;
+                                    padding-right: 11px;
+                                    padding-top: 8px;
+                                    padding-bottom: 8px;
+                                    spacing: 3px;
+                                    Text {
+                                        text: note.title == "" ? "Untitled" : note.title;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        color: note.id == root.selected-id ? Theme.accent : Theme.text;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: note.preview;
+                                        font-size: 11.5px;
+                                        color: Theme.text-dim;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                        max-height: 18px;
+                                    }
+                                    Text {
+                                        text: note.date-label;
+                                        font-size: 10px;
+                                        color: Theme.text-faint;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        if root.notes.length == 0:
+                            Text {
+                                text: "No notes match this filter";
+                                color: Theme.text-faint;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                            }
+                    }
+                }
+            }
+        }
+        Rectangle { width: 1px; background: Theme.border; }
+
+        // ===== reading pane =====
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.bg;
+            if !root.has-note:
+                VerticalLayout {
+                    alignment: center;
+                    Text { text: "Select a note to read it as a document"; font-size: 15px; color: Theme.text-faint; horizontal-alignment: center; }
+                }
+            if root.has-note:
+                Flickable {
+                    vertical-stretch: 1;
+                    content-width: self.width;
+                    content-height: docColumn.preferred-height;
+                    docColumn := VerticalLayout {
+                        padding-left: 34px;
+                        padding-right: 34px;
+                        padding-top: 24px;
+                        padding-bottom: 28px;
+                        spacing: 12px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            TextInput {
+                                text <=> root.doc-title;
+                                font-size: 30px;
+                                font-weight: 650;
+                                color: Theme.text;
+                                letter-spacing: -0.4px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                selection-background-color: Theme.accent-soft;
+                                edited => { root.title-edited(self.text); }
+                            }
+                            IconButton { selected: root.pinned; size: 38px; clicked => { root.pin-toggled(); } IconPin { stroke-color: root.pinned ? Theme.accent : Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                            IconButton { size: 38px; clicked => { root.edit-source(); } IconPencil { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                            IconButton { size: 38px; clicked => { root.open-note(); } IconExternalLink { stroke-color: Theme.text-dim; preferred-width: 19px; preferred-height: 19px; } }
+                        }
+                        Text {
+                            text: root.doc-meta;
+                            font-size: 11.5px;
+                            color: Theme.text-faint;
+                        }
+                        Rectangle { height: 1px; background: Theme.border; }
+                        if !root.source-mode:
+                            StyledText {
+                                text: root.doc-markdown;
+                                default-color: Theme.text;
+                                link-color: Theme.accent;
+                                default-font-size: 15px;
+                            }
+                        if root.source-mode:
+                            TextInput {
+                                text <=> root.doc-source;
+                                single-line: false;
+                                wrap: word-wrap;
+                                preferred-height: 460px;
+                                font-size: 14px;
+                                color: Theme.text;
+                                selection-background-color: Theme.accent-soft;
+                                edited => { root.source-edited(); }
+                            }
+                        HorizontalLayout {
+                            spacing: 24px;
+                            VerticalLayout {
+                                spacing: 6px;
+                                horizontal-stretch: 1;
+                                Text { text: "Links out"; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; color: Theme.text-faint; }
+                                for link[i] in root.links-out:
+                                    TextButton { label: "[[" + link + "]]"; clicked => { root.link-clicked(link); } }
+                                if root.links-out.length == 0:
+                                    Text { text: "None yet"; font-size: 12px; color: Theme.text-faint; }
+                            }
+                            VerticalLayout {
+                                spacing: 6px;
+                                horizontal-stretch: 1;
+                                Text { text: "Backlinks"; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; color: Theme.text-faint; }
+                                for link[i] in root.backlinks:
+                                    TextButton { label: link; clicked => { root.link-clicked(link); } }
+                                if root.backlinks.length == 0:
+                                    Text { text: "None yet"; font-size: 12px; color: Theme.text-faint; }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+}
