@@ -56,6 +56,8 @@ export component MainWindow inherits Window {
     in-out property <int> save-state: 0;
     in-out property <string> edited-label: "";
     in-out property <bool> folder-menu-open: false;
+    in-out property <bool> color-popover-open: false;
+    in-out property <int> current-note-color-index: 0;
 
     // Chrome state
     in-out property <bool> show-settings: false;
@@ -86,6 +88,7 @@ export component MainWindow inherits Window {
     callback tag-added(string);
     callback tag-removed(string);
     callback assign-folder(string);
+    callback color-picked(int);
     callback toggle-sidebar();
     callback toggle-view-mode();
     callback toggle-theme();
@@ -404,6 +407,8 @@ export component MainWindow inherits Window {
                                 save-state <=> root.save-state;
                                 edited-label <=> root.edited-label;
                                 folder-menu-open <=> root.folder-menu-open;
+                                color-popover-open <=> root.color-popover-open;
+                                current-color-index <=> root.current-note-color-index;
                                 in-trash: root.active-view == 4;
                                 in-archive: root.active-view == 3;
                                 folders: root.folders;
@@ -419,6 +424,7 @@ export component MainWindow inherits Window {
                                 tag-added(text) => { root.tag-added(text); }
                                 tag-removed(text) => { root.tag-removed(text); }
                                 assign-folder(id) => { root.assign-folder(id); }
+                                color-picked(idx) => { root.color-picked(idx); }
                                 back => { root.back-to-list(); }
                             }
 
@@ -458,6 +464,8 @@ export component MainWindow inherits Window {
                                 save-state <=> root.save-state;
                                 edited-label <=> root.edited-label;
                                 folder-menu-open <=> root.folder-menu-open;
+                                color-popover-open <=> root.color-popover-open;
+                                current-color-index <=> root.current-note-color-index;
                                 in-trash: root.active-view == 4;
                                 in-archive: root.active-view == 3;
                                 folders: root.folders;
@@ -473,6 +481,7 @@ export component MainWindow inherits Window {
                                 tag-added(text) => { root.tag-added(text); }
                                 tag-removed(text) => { root.tag-removed(text); }
                                 assign-folder(id) => { root.assign-folder(id); }
+                                color-picked(idx) => { root.color-picked(idx); }
                                 back => { root.back-to-list(); }
                             }
                         if !root.has-note:

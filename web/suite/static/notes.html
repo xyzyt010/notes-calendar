@@ -70,7 +70,11 @@
   .card { height:170px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:13px 14px 11px; cursor:pointer; display:flex; flex-direction:column; gap:6px; transition:border-color .13s; overflow:hidden; }
   .card:hover { border-color:var(--border-strong); }
   .card.selected { border-color:var(--accent); }
-  .card-title { font-size:14px; font-weight:600; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
+.color-wrap { position:relative; }
+.color-pop { position:absolute; top:46px; left:0; display:flex; gap:6px; background:var(--surface-2); border:1px solid var(--border-strong); border-radius:23px; padding:8px 10px; z-index:30; box-shadow:0 12px 32px #00000090; }
+.color-pop .sw { width:20px; height:28px; border-radius:6px; cursor:pointer; border:1.5px solid transparent; transition:transform .12s; }
+.color-pop .sw:hover { transform:scale(1.15); }
+.color-pop .sw.on { border-color:var(--text); }  .card-title { font-size:14px; font-weight:600; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
   .card-preview { font-size:12px; color:var(--text-dim); line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; }
   .card-foot { margin-top:auto; display:flex; align-items:center; gap:6px; }
   .card-date { font-size:10.5px; color:var(--text-faint); }
@@ -186,6 +190,10 @@
           <button class="iconbtn" id="pinBtn" title="Pin"><svg viewBox="0 0 24 24"><path d="M15 4.5l4.5 4.5-7 7-4.5-4.5z"/><path d="M9 15l-6 6"/></svg></button>
           <button class="iconbtn" id="favBtn" title="Favorite"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
           <button class="iconbtn" id="archiveBtn" title="Archive"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button>
+          <div class="color-wrap">
+            <button class="iconbtn" id="colorBtn" title="Background color"><svg viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg></button>
+            <div class="color-pop" id="colorPop" style="display:none"></div>
+          </div>
           <button class="iconbtn" id="copyBtn" title="Copy to clipboard"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
           <button class="iconbtn" id="trashBtn" title="Move to trash"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>
@@ -218,6 +226,8 @@
 'use strict';
 
 // ============================== state ==============================
+const NOTE_COLORS = ['#1F1F1F','#5C2B29','#614A19','#635D18','#345920','#16504B','#1E3A5F','#2D555E','#42275E','#5B2245','#442F19','#2C2D2F'];
+
 const state = {
   notes: [],          // current list (filtered)
   allNotes: [],       // unfiltered cache
@@ -400,6 +410,7 @@ function renderGrid() {
     const el = document.createElement('div');
     el.className = 'card' + (n.id === state.selectedId ? ' selected' : '');
     el.dataset.id = n.id;
+    if (n.color && n.color.toLowerCase() !== "#1f1f1f") { el.style.background = n.color; }
     el.innerHTML = `
       <div class="card-title">${escapeHtml(n.title) || 'Untitled'}</div>
       <div class="card-preview">${escapeHtml(stripMd(n.body))}</div>
@@ -444,7 +455,8 @@ async function selectNote(id) {
     $('#saveState').textContent = '';
     $('#pinBtn').style.color = n.pinned ? 'var(--accent)' : '';
     $('#favBtn').style.color = n.favorite ? 'var(--accent)' : '';
-    editorPane.style.display = 'flex';
+    $('#colorBtn').style.color = (n.color && n.color.toLowerCase() !== '#1f1f1f') ? 'var(--accent)' : '';
+    $('#colorPop').style.display = 'none';    editorPane.style.display = 'flex';
     emptyEditor.style.display = 'none';
     applyFilter();
   }
@@ -539,6 +551,40 @@ function renderEditor() {
   selectNote(state.selectedId);
 }
 
+
+// ============================== color picker ==============================
+const colorPop = $('#colorPop'), colorBtn = $('#colorBtn');
+
+function isDefaultColor(c) { return !c || c.toLowerCase() === '#1f1f1f'; }
+
+function renderSwatches(note) {
+  const cur = (note.color || '#1F1F1F').toLowerCase();
+  colorPop.innerHTML = NOTE_COLORS.map(c =>
+    `<div class="sw ${cur === c.toLowerCase() ? 'on' : ''}" data-hex="${c}" style="background:${c}"></div>`
+  ).join('');
+  colorPop.querySelectorAll('.sw').forEach(el => el.addEventListener('click', () => selectColor(el.dataset.hex)));
+}
+
+function toggleColorPop() {
+  const n = state.allNotes.find(x => x.id === state.selectedId);
+  if (!n) return;
+  renderSwatches(n);
+  colorPop.style.display = colorPop.style.display === 'none' ? 'flex' : 'none';
+}
+
+async function selectColor(hex) {
+  const n = state.allNotes.find(x => x.id === state.selectedId);
+  if (!n) return;
+  n.color = isDefaultColor(hex) ? null : hex;
+  applyFilter();
+  colorPop.style.display = 'none';
+  colorBtn.style.color = n.color ? 'var(--accent)' : '';
+  await api('/api/notes/' + n.id, { method: 'PUT', body: JSON.stringify({ color: n.color }) });
+}
+
+colorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleColorPop(); });
+document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.color-wrap')) colorPop.style.display = 'none'; });
+
 // ============================== toolbar actions ==============================
 $('#newNoteBtn').addEventListener('click', async () => {
   const r = await api('/api/notes', { method: 'POST', body: JSON.stringify({ title: '', body: '' }) });
@@ -556,7 +602,8 @@ $('#favBtn').addEventListener('click', async () => {
   if (!n) return;
   n.favorite = !n.favorite;
   $('#favBtn').style.color = n.favorite ? 'var(--accent)' : '';
-  applyFilter();
+    $('#colorBtn').style.color = (n.color && n.color.toLowerCase() !== '#1f1f1f') ? 'var(--accent)' : '';
+    $('#colorPop').style.display = 'none';  applyFilter();
   await api('/api/notes/' + n.id, { method: 'PUT', body: JSON.stringify({ favorite: n.favorite }) });
 });
 $('#archiveBtn').addEventListener('click', async () => {

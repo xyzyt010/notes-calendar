@@ -39,6 +39,35 @@ export global Theme {
 
     out property <color> success:       dark ? #9ad3a8 : #146c2e;
 
+    // ---- Note color palette (Keep-style; index used by cards & picker) ----
+    out property <color> n-default:  dark ? #1F1F1F : #FFFFFF;
+    out property <color> n-red:      dark ? #5C2B29 : #F28B82;
+    out property <color> n-orange:   dark ? #614A19 : #FBBC04;
+    out property <color> n-yellow:   dark ? #635D18 : #FFF475;
+    out property <color> n-green:    dark ? #345920 : #CCFF90;
+    out property <color> n-cyan:     dark ? #16504B : #A7FFEB;
+    out property <color> n-darkblue: dark ? #1E3A5F : #AECBFA;
+    out property <color> n-lightblue:dark ? #2D555E : #CBF0F8;
+    out property <color> n-purple:   dark ? #42275E : #D7AEFB;
+    out property <color> n-pink:     dark ? #5B2245 : #FDCFE8;
+    out property <color> n-brown:    dark ? #442F19 : #E6C9A8;
+    out property <color> n-grey:     dark ? #2C2D2F : #E8EAED;
+
+    pure public function note-color(idx: int) -> color {
+        if idx == 1 { return Theme.n-red; }
+        if idx == 2 { return Theme.n-orange; }
+        if idx == 3 { return Theme.n-yellow; }
+        if idx == 4 { return Theme.n-green; }
+        if idx == 5 { return Theme.n-cyan; }
+        if idx == 6 { return Theme.n-darkblue; }
+        if idx == 7 { return Theme.n-lightblue; }
+        if idx == 8 { return Theme.n-purple; }
+        if idx == 9 { return Theme.n-pink; }
+        if idx == 10 { return Theme.n-brown; }
+        if idx == 11 { return Theme.n-grey; }
+        return Theme.n-default;
+    }
+
     // ---- Radius scale ----
     out property <length> r-sm: 8px;
     out property <length> r-md: 12px;

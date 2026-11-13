@@ -14,6 +14,7 @@ export struct NoteData {
     pinned: bool,
     favorite: bool,
     word-count: int,
+    color-index: int,
 }
 
 export struct FolderData {
@@ -296,7 +297,7 @@ export component NoteCard inherits Rectangle {
 
     height: root.compact ? 118px : 190px;
     border-radius: Theme.r-lg;
-    background: Theme.surface;
+    background: Theme.note-color(root.note.color-index);
     border-width: 1px;
     border-color: root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border);
     animate background { duration: 130ms; }

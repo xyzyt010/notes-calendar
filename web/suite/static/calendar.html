@@ -102,7 +102,30 @@
   .chip:hover { filter:brightness(1.15); }
   .more { font-size:9.5px; color:var(--text-dim); font-weight:600; padding-left:2px; }
 
-  /* ---------- Day view (time grid) ---------- */
+  /* ---------- Week view (7-column time grid) ---------- */
+.week-view { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+.week-header { display:flex; border-bottom:1px solid var(--border); flex:0 0 46px; position:sticky; top:0; background:var(--bg); z-index:3; }
+.week-header .gutter-h { flex:0 0 56px; border-right:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:var(--text-faint); letter-spacing:1px; }
+.week-day-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-right:1px solid var(--border); cursor:pointer; gap:1px; }
+.week-day-col:last-child { border-right:none; }
+.week-day-col:hover { background:var(--surface-2); }
+.week-day-col .wd { font-size:9.5px; font-weight:700; letter-spacing:1px; color:var(--text-faint); }
+.week-day-col .dn { font-size:15px; font-weight:500; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; }
+.week-day-col.today .dn { background:var(--accent); color:var(--on-accent); font-weight:700; }
+.week-grid { display:flex; }
+.week-gutter { flex:0 0 56px; border-right:1px solid var(--border); }
+.week-gutter-row { height:52px; position:relative; }
+.week-gutter-row span { position:absolute; top:-7px; right:8px; font-size:9.5px; color:var(--text-faint); }
+.week-col { flex:1; border-right:1px solid var(--border); position:relative; min-width:0; }
+.week-col:last-child { border-right:none; }
+.week-col.today { background:#aecbfa08; }
+.week-col .time-row { height:52px; border-bottom:1px solid var(--border); opacity:0.55; }
+.week-col .time-row.half { opacity:0.18; }
+.week-view .now-line { position:absolute; left:0; right:0; height:2px; background:var(--red); z-index:2; }
+.week-view .now-dot { position:absolute; left:-5px; top:-4px; width:9px; height:9px; border-radius:50%; background:var(--red); z-index:2; }
+.week-view .event-block { position:absolute; left:2px; right:2px; border-radius:6px; padding:2px 6px; font-size:10px; font-weight:600; color:#101418; overflow:hidden; cursor:pointer; border-left:3px solid rgba(0,0,0,0.25); z-index:1; }
+.week-view .event-block:hover { filter:brightness(1.12); }
+/* ---------- Day view (time grid) ---------- */
   .day-view { flex:1; overflow-y:auto; position:relative; }
   .allday-strip { min-height:36px; display:flex; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
   .allday-strip .lbl { font-size:10px; font-weight:700; color:var(--text-faint); letter-spacing:1px; }
@@ -218,6 +241,7 @@
       </div>
       <div class="month-grid" id="monthView"></div>
       <div class="day-view" id="dayView" style="display:none"></div>
+      <div class="week-view" id="weekView" style="display:none"></div>
     </div>
   </div>
 
@@ -316,6 +340,7 @@ const relDay = (d) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 const weekdayIndex = (d) => (d.getDay() + 6) % 7; // Mon=0
+const weekStart = (d) => { const wd = weekdayIndex(d); return addDays(startOfDay(d), -wd); };
 
 function eventsIntersect(e, day) {
   const s = new Date(e.start), en = new Date(e.end);
@@ -547,6 +572,101 @@ function renderDayView() {
   }
 }
 
+// ============================== week view (time grid) ==============================
+function renderWeekView() {
+  const w = $('#weekView');
+  w.innerHTML = '';
+  const ws = weekStart(state.cursor);
+  const today = startOfDay(new Date());
+  const hourHeight = 52;
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(addDays(ws, i));
+
+  // ---------- header row with day names & numbers ----------
+  const header = document.createElement('div');
+  header.className = 'week-header';
+  header.innerHTML = '<div class="gutter-h">WEEK</div>' + days.map(d => {
+    const isToday = sameDay(d, today);
+    const wd = d.toLocaleDateString([], { weekday: 'short' });
+    return `<div class="week-day-col ${isToday ? 'today' : ''}" data-day="${d.toISOString()}"><span class="wd">${wd}</span><span class="dn">${d.getDate()}</span></div>`;
+  }).join('');
+  w.appendChild(header);
+  header.querySelectorAll('.week-day-col').forEach(el => el.addEventListener('click', () => {
+    state.cursor = new Date(el.dataset.day);
+    state.view = 0; syncSwitcher(); render();
+  }));
+
+  // ---------- all-day strip ----------
+  const allDay = [];
+  const seen = new Set();
+  for (const d of days) for (const e of visibleEvents()) {
+    if (e.all_day && eventsIntersect(e, d) && !seen.has(e.id)) { seen.add(e.id); allDay.push({ e, d }); }
+  }
+  const strip = document.createElement('div');
+  strip.className = 'allday-strip';
+  strip.innerHTML = '<span class="lbl">ALL DAY</span>';
+  for (const { e, d } of allDay) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.style.background = e.color || '#aecbfa';
+    chip.style.height = '26px';
+    chip.style.display = 'inline-flex';
+    chip.style.alignItems = 'center';
+    chip.textContent = d.getDate() + ' · ' + e.title;
+    chip.addEventListener('click', () => openEditor(e.id));
+    strip.appendChild(chip);
+  }
+  w.appendChild(strip);
+
+  // ---------- time grid ----------
+  const grid = document.createElement('div');
+  grid.className = 'week-grid';
+  grid.innerHTML = '<div class="week-gutter">' + Array.from({ length: 24 }, (_, h) =>
+    `<div class="week-gutter-row">${h === 0 ? '' : `<span>${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}</span>`}</div>`
+  ).join('') + '</div>'
+    + Array.from({ length: 7 }, (_, i) =>
+      `<div class="week-col ${sameDay(days[i], today) ? 'today' : ''}">` +
+      Array.from({ length: 48 }, () => '<div class="time-row"></div><div class="time-row half"></div>').join('') + '</div>'
+    ).join('');
+  w.appendChild(grid);
+
+  // ---------- events ----------
+  const cols = grid.querySelectorAll('.week-col');
+  for (let i = 0; i < 7; i++) {
+    const d0 = days[i];
+    const col = cols[i];
+    const timed = visibleEvents().filter(e => !e.all_day && eventsIntersect(e, d0));
+    for (const e of timed) {
+      const s = new Date(e.start), en = new Date(e.end);
+      const startMin = (s.getHours() * 60 + s.getMinutes());
+      const durMin = Math.max(15, (en - s) / 60000);
+      const top = (startMin / 60) * hourHeight;
+      const h = (durMin / 60) * hourHeight;
+      const block = document.createElement('div');
+      block.className = 'event-block';
+      block.style.background = e.color || '#aecbfa';
+      block.style.top = top + 'px';
+      block.style.height = Math.max(18, h) + 'px';
+      block.innerHTML = `<div>${escapeHtml(e.title)}</div><div style="font-weight:400; opacity:0.75; font-size:9.5px">${fmtTimeShort(s)}</div>`;
+      block.addEventListener('click', () => openEditor(e.id));
+      col.appendChild(block);
+    }
+    // now line on today's column
+    if (sameDay(d0, today)) {
+      const now = new Date();
+      const top = (now.getHours() * 60 + now.getMinutes()) / 60 * hourHeight;
+      const line = document.createElement('div');
+      line.className = 'now-line';
+      line.style.top = top + 'px';
+      const dot = document.createElement('div');
+      dot.className = 'now-dot';
+      dot.style.top = (top - 4) + 'px';
+      col.appendChild(line); col.appendChild(dot);
+    }
+  }
+  $('#statusCount').textContent = visibleEvents().length + ' events';
+}
+
 // ============================== year view ==============================
 function renderYearView() {
   const grid = $('#monthView');
@@ -590,18 +710,20 @@ function syncSwitcher() {
 function render() {
   $('#dateTitle').textContent = state.view === 2 ? monthName(state.cursor)
     : state.view === 3 ? String(state.cursor.getFullYear())
+    : state.view === 1 ? (() => { const ws = weekStart(state.cursor); const we = addDays(ws, 6); const sameMonth = ws.getMonth() === we.getMonth(); return ws.toLocaleDateString([], { month: 'short' }) + ' ' + ws.getDate() + ' – ' + (sameMonth ? '' : we.toLocaleDateString([], { month: 'short' }) + ' ') + we.getDate() + ', ' + we.getFullYear(); })()
     : state.cursor.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  $('#monthView').style.display = (state.view === 0 || state.view === 1) ? 'none' : 'grid';
+  $('#monthView').style.display = (state.view === 2 || state.view === 3) ? 'grid' : 'none';
   $('#dayView').style.display = state.view === 0 ? 'flex' : 'none';
-  $('#weekdayRow').style.display = (state.view === 2 || state.view === 1) ? 'flex' : 'none';
+  $('#weekView').style.display = state.view === 1 ? 'flex' : 'none';
+  $('#weekdayRow').style.display = state.view === 2 ? 'flex' : 'none';
   $('#monthView').style.gridTemplateColumns = 'repeat(7, 1fr)';
   $('#monthView').style.gridTemplateRows = 'repeat(6, 1fr)';
 
   if (state.view === 2) renderMonthGrid();
   else if (state.view === 0) renderDayView();
   else if (state.view === 3) renderYearView();
-  else if (state.view === 1) renderMonthGrid(); // week uses month layout in web v1 (keeps it simple & efficient)
+  else if (state.view === 1) renderWeekView();
   renderMiniMonth();
   syncSwitcher();
 }
@@ -663,8 +785,8 @@ async function saveEvent() {
   const title = evTitle.value.trim();
   if (!title) { evTitle.focus(); return; }
   const date = evDate.value;
-  const start = `${date}T${evStart.value || '09:00'}:00Z`;
-  const end = `${date}T${evEnd.value || '10:00'}:00Z`;
+  const start = new Date(`${date}T${evStart.value || '09:00'}:00`).toISOString();
+  const end = new Date(`${date}T${evEnd.value || '10:00'}:00`).toISOString();
   const body = {
     title,
     start,
@@ -707,8 +829,8 @@ $('#evAllDay').addEventListener('change', () => {
 // ============================== toolbar ==============================
 $('#menuBtn').addEventListener('click', () => { const sb = $('#sidebar'); sb.style.display = sb.style.display === 'none' ? '' : 'none'; });
 $('#todayBtn').addEventListener('click', () => { state.cursor = new Date(); render(); });
-$('#prevBtn').addEventListener('click', () => { state.cursor = addDays(state.cursor, state.view === 2 ? -30 : (state.view === 3 ? -365 : -1)); render(); });
-$('#nextBtn').addEventListener('click', () => { state.cursor = addDays(state.cursor, state.view === 2 ? 30 : (state.view === 3 ? 365 : 1)); render(); });
+$('#prevBtn').addEventListener('click', () => { state.cursor = addDays(state.cursor, state.view === 2 ? -30 : (state.view === 3 ? -365 : (state.view === 1 ? -7 : -1))); render(); });
+$('#nextBtn').addEventListener('click', () => { state.cursor = addDays(state.cursor, state.view === 2 ? 30 : (state.view === 3 ? 365 : (state.view === 1 ? 7 : 1))); render(); });
 document.querySelectorAll('.sw-btn').forEach(b => b.addEventListener('click', () => { state.view = Number(b.dataset.view); render(); }));
 $('#miniPrev').addEventListener('click', () => { state.cursor = new Date(state.cursor.getFullYear(), state.cursor.getMonth() - 1, 1); render(); });
 $('#miniNext').addEventListener('click', () => { state.cursor = new Date(state.cursor.getFullYear(), state.cursor.getMonth() + 1, 1); render(); });

@@ -3,7 +3,7 @@
 import { Theme } from "../../shared-ui/theme.slint";
 import {
     IconChevronLeft, IconPin, IconStar, IconArchive, IconArchiveArrowUp, IconTrash,
-    IconUndo2, IconCopy, IconFolder, IconX, IconCircleCheck,
+    IconUndo2, IconCopy, IconFolder, IconX, IconCircleCheck, IconDroplet,
 } from "../../shared-ui/icons.slint";
 import {
     IconButton, FolderData,
@@ -22,6 +22,8 @@ export component EditorPane inherits Rectangle {
     in-out property <int> save-state: 0;          // 0 idle · 1 saving · 2 saved
     in-out property <string> edited-label: "";
     in-out property <bool> folder-menu-open: false;
+    in-out property <bool> color-popover-open: false;
+    in-out property <int> current-color-index: 0;
 
     // ---- in state ----
     in property <bool> compact: false;
@@ -43,6 +45,7 @@ export component EditorPane inherits Rectangle {
     callback tag-removed(string);
     callback assign-folder(string);
     callback back();
+    callback color-picked(int);
 
     background: Theme.bg;
 
@@ -62,6 +65,13 @@ export component EditorPane inherits Rectangle {
                 size: 38px;
                 clicked => { root.folder-menu-open = !root.folder-menu-open; }
                 IconFolder { stroke-color: root.current-folder == "" ? Theme.text-dim : Theme.accent; preferred-width: 20px; preferred-height: 20px; }
+            }
+
+            // Note color
+            palettebtn := IconButton {
+                size: 38px;
+                clicked => { root.color-popover-open = !root.color-popover-open; }
+                IconDroplet { stroke-color: root.current-color-index != 0 ? Theme.accent : Theme.text-dim; preferred-width: 20px; preferred-height: 20px; }
             }
 
             Rectangle {} // spring
@@ -303,6 +313,51 @@ export component EditorPane inherits Rectangle {
             }
         }
     }
+
+    // ===== Color swatch popover (absolute overlay) =====
+    if root.color-popover-open:
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            TouchArea { clicked => { root.color-popover-open = false; } }
+
+            Rectangle {
+                x: root.compact ? 46px : 94px;
+                y: 58px;
+                width: 284px;
+                height: 46px;
+                background: Theme.surface-2;
+                border-radius: 23px;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-blur: 28px;
+                drop-shadow-offset-y: 4px;
+                drop-shadow-color: #00000060;
+                HorizontalLayout {
+                    x: 8px;
+                    y: 8px;
+                    width: parent.width - 16px;
+                    height: 30px;
+                    spacing: 5px;
+                    for idx[i] in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+                        swatch := TouchArea {
+                            width: 22px;
+                            height: 30px;
+                            clicked => { root.color-picked(idx); root.color-popover-open = false; }
+                            Rectangle {
+                                x: 0;
+                                y: 0;
+                                width: 22px;
+                                height: 30px;
+                                border-radius: 6px;
+                                background: Theme.note-color(idx);
+                                border-width: root.current-color-index == idx ? 2px : 1px;
+                                border-color: root.current-color-index == idx ? Theme.accent : Theme.border-strong;
+                            }
+                        }
+                }
+            }
+        }
 
     // ===== Folder dropdown (absolute overlay) =====
     if root.folder-menu-open:

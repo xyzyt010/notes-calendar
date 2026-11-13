@@ -15,6 +15,31 @@ use uuid::Uuid;
 use ycore::model::NoteSummary;
 use ycore::storage::{notes as notes_store, open_notes_db};
 
+/// Canonical note-card background colors (Keep-style dark palette, matches web).
+/// Index in this array == (note color index - 1). Stored on the Note.color field.
+const NOTE_COLOR_HEX: [&str; 11] = [
+    "#5C2B29", "#614A19", "#635D18", "#345920", "#16504B", "#1E3A5F", "#2D555E", "#42275E", "#5B2245", "#442F19", "#2C2D2F",
+];
+
+fn color_index(color: &Option<String>) -> i32 {
+    match color {
+        Some(c) => NOTE_COLOR_HEX
+            .iter()
+            .position(|h| h.eq_ignore_ascii_case(c))
+            .map(|i| i as i32 + 1)
+            .unwrap_or(0),
+        None => 0,
+    }
+}
+
+fn color_hex(idx: i32) -> Option<String> {
+    if idx <= 0 {
+        None
+    } else {
+        NOTE_COLOR_HEX.get((idx - 1) as usize).map(|s| s.to_string())
+    }
+}
+
 slint::include_modules!();
 
 struct AppState {
@@ -89,6 +114,7 @@ fn note_to_data(s: &NoteSummary) -> NoteData {
         pinned: s.pinned,
         favorite: s.favorite,
         word_count: 0,
+        color_index: color_index(&s.color),
     }
 }
 
@@ -200,6 +226,8 @@ fn apply_to_editor(ui: &MainWindow, note: &ycore::model::Note) {
     ui.set_selected_folder_of_editor(note.folder_id.map(|f| f.to_string()).unwrap_or_default().into());
     ui.set_has_note(true);
     ui.set_selected_id(note.id.to_string().into());
+    ui.set_current_note_color_index(color_index(&note.color));
+    ui.set_color_popover_open(false);
 }
 
 fn select_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid) {
@@ -276,9 +304,18 @@ pub fn run_ui() -> anyhow::Result<()> {
         if count == 0 {
             let welcome = ycore::model::Note::new(
                 "Welcome to Notes 👻",
-                "# Welcome to Notes\n\nA fast, private, local-first notes app — part of the yellod suite.\n\n## Get around\n\n- **Ctrl+N** — new note\n- **Ctrl+F** — search\n- **Pin** anything you want close\n- **Archive** finished thoughts\n- **Trash** holds deleted notes until you empty it\n\n## Your data\n\nEverything you write stays on this device in a local SQLite database. Nothing leaves your machine unless you tell it to.\n\n## Tips\n\n- Search uses full-text search — just start typing\n- Add tags with **#** in the tag row\n- Organize with folders in the sidebar (press the ☰ at the top-left)\n- Toggle light / dark from the moon icon at the bottom of the rail\n\nHappy writing.",
+                "# Welcome to Notes\n\nA fast, private, local-first notes app — part of the yellod suite.\n\n## Get around\n\n- **Ctrl+N** — new note\n- **Ctrl+F** — search\n- **Pin** anything you want close\n- **Archive** finished thoughts\n- **Trash** holds deleted notes until you empty it\n\n## Your data\n\nEverything you write stays on this device in a local SQLite database. Nothing leaves your machine unless you tell it to.\n\n## Tips\n\n- Search uses full-text search — just start typing\n- Add tags with **#** in the tag row\n- Tap the droplet icon in the editor to pick a background color\n- Organize with folders in the sidebar (press the ☰ at the top-left)\n- Toggle light / dark from the moon icon at the bottom of the rail\n\nHappy writing.",
             );
             let _ = notes_store::create_note(&state.db, &welcome);
+
+            let ideas = ycore::model::Note::new(
+                "Weekend ideas 🎒",
+                "- Coffee at the little place by the market\n- Long walk along the river\n- Finish reading that novel\n- Call mum",
+            );
+            let mut ideas = ideas;
+            ideas.color = Some("#1E3A5F".to_string());
+            ideas.pinned = true;
+            let _ = notes_store::create_note(&state.db, &ideas);
         }
         state.seeded = true;
         save_config(&state);
@@ -454,6 +491,26 @@ pub fn run_ui() -> anyhow::Result<()> {
                     ui2.set_editor_favorite(new_state);
                     refresh_list(&st, &ui2);
                 }
+            }
+        });
+    }
+
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_color_picked(move |idx: i32| {
+            let id = st.borrow().current_id;
+            if let Some(id) = id {
+                {
+                    let s = st.borrow();
+                    if let Ok(Some(mut note)) = notes_store::get_note(&s.db, id) {
+                        note.color = color_hex(idx);
+                        let _ = notes_store::update_note(&s.db, &note);
+                    }
+                }
+                ui2.set_current_note_color_index(idx);
+                ui2.set_color_popover_open(false);
+                refresh_list(&st, &ui2);
             }
         });
     }
