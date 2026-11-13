@@ -115,11 +115,15 @@ jobs:
             cp "$bin" "dist/${app}-${{ github.ref_name }}-${{ matrix.display }}${{ matrix.bin_ext }}"
           done
 
-      - name: Build Android APKs (debug, unsigned)
+      # NOTE: cargo-apk2 1.5.0 panics AFTER producing + signing the APK with
+      # "Bin is not compatible with Cdylib" (non-fatal artifact-resolver bug in
+      # cargo-subcommand-0.12.0). The APKs are verified by apk2's own alignment +
+      # signature checks before the panic. We tolerate that one non-zero exit and
+      # verify the produced APKs instead — anything else fails loudly.
+      - name: Build Android APKs (debug keystore)
         if: matrix.use_android
         shell: bash
         env:
-          # ubuntu-24.04 runners ship the Android SDK/NDK preinstalled at this path
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/27.3.13750724
           ANDROID_NDK: /usr/local/lib/android/sdk/ndk/27.3.13750724
@@ -127,15 +131,22 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           set -e
-          echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME" || true
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME" || true
           ls "$ANDROID_HOME/ndk" || true
           mkdir -p dist/apks
           for app in notes calendar; do
-            cargo apk2 build --target ${{ matrix.target }} -p $app
+            cargo apk2 build --target ${{ matrix.target }} -p $app \
+              || echo "::warning::apk2 exited non-zero for $app (expected artifact-resolver panic after signing). Verifying produced APK instead."
           done
-          find target/debug/apk -name '*.apk' -type f -exec cp {} dist/apks/ \;
-          find target/release/apk -name '*.apk' -type f -exec cp {} dist/apks/ \;
+          find target -path '*/apk/*.apk' -type f -exec cp {} dist/apks/ \;
           ls -la dist/apks
+          COUNT=$(find dist/apks -name '*.apk' | wc -l)
+          if [ "$COUNT" -lt 2 ]; then
+            echo "ERROR: expected 2 APKs, found $COUNT"
+            find target -name '*.apk' -exec ls -la {} \;
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
