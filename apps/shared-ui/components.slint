@@ -23,6 +23,8 @@ export struct NoteImageData {
 export struct NoteData {
     id: string,
     title: string,
+    title-highlighted: bool,
+    title-styled: styled-text,
     preview: string,
     date-label: string,
     pinned: bool,
@@ -33,6 +35,7 @@ export struct NoteData {
     card-height: length,
     render-md: bool,
     preview-styled: styled-text,
+    preview-highlighted: bool,   // search-match spans present in preview-styled
     checklist-items: [ChecklistItemData],
     is-checklist: bool,
     images: [NoteImageData],
@@ -594,20 +597,33 @@ export component NoteCard inherits Rectangle {
         // 15px badge always visible; unpinned = outline button on hover.
         HorizontalLayout {
             spacing: 8px;
-            Text {
-                horizontal-stretch: 1;
-                text: root.note.title == "" ? "Untitled" : root.note.title;
-                font-size: 16.5px;
-                font-weight: 500;
-                line-height-factor: 1.4;
-                color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
-                font-italic: root.note.title == "";
-                // Web .note-title h3: white-space: pre-wrap — titles wrap,
-                // never ellipsis (Compact keeps the single-line row).
-                wrap: root.compact ? no-wrap : word-wrap;
-                overflow: elide;
-                vertical-alignment: center;
-            }
+            // Search mode: web wraps matched title runs in <mark>; Slint can
+            // only tint the match foreground. StyledText has no font-weight
+            // or line-height-factor properties, so the matched title renders
+            // with the default weight instead of the card title's 500.
+            if root.note.title-highlighted:
+                StyledText {
+                    horizontal-stretch: 1;
+                    text: root.note.title-styled;
+                    default-font-size: 16.5px;
+                    default-color: Theme.card-title-ink;
+                    vertical-alignment: center;
+                }
+            if !root.note.title-highlighted:
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.note.title == "" ? "Untitled" : root.note.title;
+                    font-size: 16.5px;
+                    font-weight: 500;
+                    line-height-factor: 1.4;
+                    color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
+                    font-italic: root.note.title == "";
+                    // Web .note-title h3: white-space: pre-wrap — titles wrap,
+                    // never ellipsis (Compact keeps the single-line row).
+                    wrap: root.compact ? no-wrap : word-wrap;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
             if root.compact && root.note.pinned:
                 VerticalLayout {
                     alignment: center;
@@ -635,13 +651,16 @@ export component NoteCard inherits Rectangle {
                 }
         }
 
-        if root.note.render-md:
+        // One StyledText branch serves both prefs-md rendering and search
+        // highlighting (highlighted takes precedence in preview-styled).
+        if !root.note.is-checklist && (root.note.render-md || root.note.preview-highlighted):
             StyledText {
                 text: root.note.preview-styled;
                 default-font-size: 12px;
                 default-color: Theme.card-body-ink;
                 link-color: Theme.accent;
                 max-lines: root.preview-lines <= 0 ? 0 : root.preview-lines;
+                vertical-stretch: 1;
             }
         if root.note.is-checklist && !root.note.render-md:
             VerticalLayout {
@@ -667,7 +686,7 @@ export component NoteCard inherits Rectangle {
                             }
                         }
             }
-        if !root.note.is-checklist && !root.note.render-md:
+        if !root.note.is-checklist && !root.note.render-md && !root.note.preview-highlighted:
             Text {
                 width: 100%;
                 // No fixed height here: with vertical-stretch the layout gives

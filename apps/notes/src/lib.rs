@@ -489,6 +489,84 @@ fn styled_markdown(text: &str) -> slint::StyledText {
     slint::StyledText::from_markdown(text).unwrap_or_else(|_| slint::StyledText::from_plain_text(text))
 }
 
+/// Case-insensitive byte ranges of `query` inside `text` (char-safe).
+fn query_ranges(text: &str, query: &str) -> Vec<(usize, usize)> {
+    let q: Vec<char> = query.chars().flat_map(|c| c.to_lowercase()).collect();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let t: Vec<(usize, char)> = text
+        .char_indices()
+        .flat_map(|(i, c)| c.to_lowercase().map(move |l| (i, l)))
+        .collect();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + q.len() <= t.len() {
+        if t[i..i + q.len()].iter().map(|&(_, c)| c).eq(q.iter().copied()) {
+            let start = t[i].0;
+            let end = if i + q.len() < t.len() { t[i + q.len()].0 } else { text.len() };
+            out.push((start, end));
+            i += q.len();
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Build CommonMark with search matches tinted amber (Slint has no
+/// background spans — the web `<mark>` box can't be painted in 1.18;
+/// `<font color>` is the documented segmented path). Text is
+/// markdown-escaped first so it renders literally, like the web.
+fn highlighted_markdown(text: &str, query: &str, dark: bool) -> Option<String> {
+    let q = query.trim();
+    if q.is_empty() {
+        return None;
+    }
+    let ranges = query_ranges(text, q);
+    if ranges.is_empty() {
+        return None;
+    }
+    let color = if dark { "#F9AB00" } else { "#B26F00" };
+    fn esc(s: &str, out: &mut String) {
+        for c in s.chars() {
+            if c.is_ascii_punctuation() {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+    }
+    let mut md = String::with_capacity(text.len() + ranges.len() * 24);
+    let mut pos = 0usize;
+    // Split ranges at newlines: a font span must stay within one paragraph.
+    let mut segs: Vec<(usize, usize)> = Vec::new();
+    for &(a, b) in &ranges {
+        let mut start = a;
+        for (i, c) in text[a..b].char_indices() {
+            if c == '\n' {
+                if i > 0 {
+                    segs.push((start, a + i));
+                }
+                start = a + i + 1;
+            }
+        }
+        if start < b {
+            segs.push((start, b));
+        }
+    }
+    for (a, b) in &segs {
+        esc(&text[pos..*a], &mut md);
+        md.push_str("<font color=\"");
+        md.push_str(color);
+        md.push_str("\">");
+        esc(&text[*a..*b], &mut md);
+        md.push_str("</font>");
+        pos = *b;
+    }
+    esc(&text[pos..], &mut md);
+    Some(md)
+}
+
 fn parse_checklist_items(body: &str) -> Vec<ChecklistItemData> {
     let mut items = Vec::new();
     for (line_index, line) in body.lines().enumerate() {
@@ -774,18 +852,26 @@ fn is_strict_checklist(body: &str) -> bool {
     !items.is_empty() && items.len() == non_empty
 }
 
-fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>) -> NoteData {
+fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>, query: &str, dark: bool) -> NoteData {
     let title = s.title.as_str();
     let preview = s.preview.as_str();
     let checklist_items = checklist_preview_items(preview, title, card_w);
     let is_checklist = !checklist_items.is_empty();
     let checklist_extra = if is_checklist { (checklist_items.len().saturating_sub(1) as f32) * 5.0 } else { 0.0 };
+    let highlighted = if is_checklist { None } else { highlighted_markdown(preview, query, dark) };
+    let preview_highlighted = highlighted.is_some();
+    // Web highlights note titles too (highlightHtml in noteTitle). Keep the
+    // "Untitled" placeholder untouched — it has no underlying title text.
+    let title_md = if title.is_empty() { None } else { highlighted_markdown(title, query, dark) };
+    let title_highlighted = title_md.is_some();
     NoteData {
         images: ModelRc::new(VecModel::from(images)),
         checklist_items: ModelRc::new(VecModel::from(checklist_items)),
         is_checklist,
         id: s.id.to_string().into(),
         title: title.into(),
+        title_highlighted,
+        title_styled: title_md.map(|md| styled_markdown(&md)).unwrap_or_default(),
         // Web parity: card previews are the raw body text (markdown shown
         // literally, e.g. "# Welcome", "**Ctrl+N**"; app.js keeps newlines).
         preview: preview.into(),
@@ -797,7 +883,8 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         image_count: s.image_count as i32,
         card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
-        preview_styled: styled_markdown(preview),
+        preview_styled: highlighted.map(|md| styled_markdown(&md)).unwrap_or_else(|| styled_markdown(preview)),
+        preview_highlighted,
     }
 }
 
@@ -1128,7 +1215,7 @@ fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         let data: Vec<NoteData> = list
             .iter()
             .filter(|n| vault_filter.is_empty() || n.title.to_lowercase().contains(&vault_filter) || n.preview.to_lowercase().contains(&vault_filter))
-            .map(|n| note_to_data(n, &prefs, 400.0, Vec::new()))
+            .map(|n| note_to_data(n, &prefs, 400.0, Vec::new(), "", s.dark))
             .collect();
         let first = data.first().and_then(|n| Uuid::parse_str(&n.id).ok());
         ui.set_vault_notes(ModelRc::new(VecModel::from(data)));
@@ -1689,10 +1776,10 @@ fn toast(ui: &MainWindow, msg: &str) {
     ui.set_toast_visible(true);
 }
 
-fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>) -> (NoteData, f32) {
+fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str, dark: bool) -> (NoteData, f32) {
     let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp, card_w)
         + if s.image_count > 0 { 146.0 } else { 0.0 };
-    (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key)), height)
+    (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query, dark), height)
 }
 
 // ---------- list refresh ----------
@@ -1774,11 +1861,11 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
 
     let pinned_e: Vec<(NoteData, f32)> = pin_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref()))
+        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref(), &s.search, s.dark))
         .collect();
     let others_e: Vec<(NoteData, f32)> = oth_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref()))
+        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref(), &s.search, s.dark))
         .collect();
 
     // Uniform grid: pinned first, then others, in the order they should render.
@@ -3963,5 +4050,29 @@ pub fn android_main(app: slint::android::AndroidApp) {
     slint::android::init(app).unwrap();
     if let Err(e) = run_ui() {
         eprintln!("[notes] run_ui failed: {e:?}");
+    }
+}
+
+#[cfg(test)]
+mod highlight_tests {
+    use super::*;
+
+    #[test]
+    fn query_ranges_matches_web_case_insensitive_semantics() {
+        assert_eq!(query_ranges("Roadmap and roadmap", "roadmap"), vec![(0, 7), (12, 19)]);
+        assert_eq!(query_ranges("aaa", "a"), vec![(0, 1), (1, 2), (2, 3)]);
+        assert_eq!(query_ranges("Über alles", "über"), vec![(0, 5)]);
+        assert!(query_ranges("abc", "z").is_empty());
+        assert!(query_ranges("abc", "").is_empty());
+    }
+
+    #[test]
+    fn highlighted_markdown_scopes_matches_and_skips_clean_text() {
+        assert!(highlighted_markdown("plain text", "roadmap", true).is_none());
+        assert!(highlighted_markdown("roadmap", " ", true).is_none());
+        let md = highlighted_markdown("**roadmap**\nroadmap", "roadmap", false).unwrap();
+        assert!(md.contains("<font color=\"#B26F00\">"), "{md}");
+        assert_eq!(md.matches("<font").count(), 2);
+        assert!(md.contains("\\*\\*"), "markdown must be escaped: {md}");
     }
 }
