@@ -4,7 +4,7 @@
 import { Theme } from "../../shared-ui/theme.slint";
 import { AboutSlint } from "std-widgets.slint";
 import {
-    IconGhost, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash,
+    IconBrand, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash, IconLogout,
     IconSettings, IconMoon, IconSun, IconLayoutGrid, IconList, IconImage, IconPencil, IconDownload,
     IconFileText, IconFolder, IconFolderPlus, IconTag, IconPanelLeft, IconLink2, IconLock,
 } from "../../shared-ui/icons.slint";
@@ -439,7 +439,7 @@ export component MainWindow inherits Window {
                                 spacing: 10px;
                                 padding-left: 4px;
                                 padding-right: 10px;
-                                VerticalLayout { alignment: center; IconGhost { preferred-width: 22px; preferred-height: 22px; stroke-color: Theme.text-dim; } }
+                                VerticalLayout { alignment: center; IconBrand { preferred-width: 24px; preferred-height: 24px; stroke-color: Theme.text-dim; } }
                                 Text {
                                     text: "Notes";
                                     font-size: 22px;
@@ -466,6 +466,13 @@ export component MainWindow inherits Window {
                                 size: 44px;
                                 clicked => { root.new-note(); }
                                 IconPlus { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; }
+                            }
+                            // Webapp topbar right: [+] then sign-out (native maps it to
+                            // locking the vault -> unlock screen, like the web's logout).
+                            IconButton {
+                                size: 44px;
+                                clicked => { root.lock-now(); }
+                                IconLogout { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; }
                             }
                             // webapp parity: topbar right holds only the New note (+) action;
                             // Settings + layout cycle live in the rail (see sidebar below).
@@ -521,9 +528,9 @@ export component MainWindow inherits Window {
                                         sideColumn := VerticalLayout {
                                             spacing: 2px;
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.note-count + ""; clicked => { root.view-selected(0); root.layout-selected(0); } IconGhost { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.note-count + ""; clicked => { root.view-selected(0); root.layout-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
-                                                RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); root.layout-selected(0); } IconGhost { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                                                RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); root.layout-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
                                                 SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: ""; clicked => { root.layout-selected(0); root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):

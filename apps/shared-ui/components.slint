@@ -2,7 +2,7 @@
 
 import { Theme } from "theme.slint";
 import {
-    IconSearch, IconX, IconPin, IconPinFilled, IconGhost, IconArchive, IconArchiveArrowUp, IconTrash, IconUndo2,
+    IconSearch, IconX, IconPin, IconPinFilled, IconBrandThin, IconArchive, IconArchiveArrowUp, IconTrash, IconUndo2,
     IconPalette, IconMoreVert, IconDownload, IconClock, IconHistory, IconRestore, IconCheck, IconNoteFile,
 } from "icons.slint";
 
@@ -593,16 +593,18 @@ export component NoteCard inherits Rectangle {
         // Title row: pin control sits top-right (web pinSvg). Pinned = solid
         // 15px badge always visible; unpinned = outline button on hover.
         HorizontalLayout {
-            height: root.compact ? 24px : 32px;
             spacing: 8px;
             Text {
                 horizontal-stretch: 1;
                 text: root.note.title == "" ? "Untitled" : root.note.title;
                 font-size: 16.5px;
                 font-weight: 500;
+                line-height-factor: 1.4;
                 color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
                 font-italic: root.note.title == "";
-                wrap: no-wrap;
+                // Web .note-title h3: white-space: pre-wrap — titles wrap,
+                // never ellipsis (Compact keeps the single-line row).
+                wrap: root.compact ? no-wrap : word-wrap;
                 overflow: elide;
                 vertical-alignment: center;
             }
@@ -612,18 +614,23 @@ export component NoteCard inherits Rectangle {
                     IconPinFilled { stroke-color: Theme.icon; preferred-width: 15px; preferred-height: 15px; }
                 }
             if !root.compact:
-                Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    opacity: (root.note.pinned || ta.has-hover || root.color-open || root.more-open) ? 1.0 : 0.0;
-                    animate opacity { duration: 120ms; easing: ease-out; }
-                    IconButton {
-                        size: 32px;
-                        clicked => { if root.note.pinned || ta.has-hover || root.color-open || root.more-open { root.pin-toggled(); } }
-                        if root.note.pinned:
-                            IconPinFilled { stroke-color: Theme.text; preferred-width: 17px; preferred-height: 17px; }
-                        if !root.note.pinned:
-                            IconPin { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                VerticalLayout {
+                    alignment: start;
+                    Rectangle {
+                        width: (root.note.pinned || ta.has-hover || root.color-open || root.more-open) ? 32px : 0px;
+                        height: 32px;
+                        clip: true;
+                        animate width { duration: 120ms; easing: ease-out; }
+                        opacity: (root.note.pinned || ta.has-hover || root.color-open || root.more-open) ? 1.0 : 0.0;
+                        animate opacity { duration: 120ms; easing: ease-out; }
+                        IconButton {
+                            size: 32px;
+                            clicked => { if root.note.pinned || ta.has-hover || root.color-open || root.more-open { root.pin-toggled(); } }
+                            if root.note.pinned:
+                                IconPinFilled { stroke-color: Theme.text; preferred-width: 17px; preferred-height: 17px; }
+                            if !root.note.pinned:
+                                IconPin { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        }
                     }
                 }
         }
@@ -663,7 +670,10 @@ export component NoteCard inherits Rectangle {
         if !root.note.is-checklist && !root.note.render-md:
             Text {
                 width: 100%;
-                height: root.compact ? 18px : root.height - 88px;
+                // No fixed height here: with vertical-stretch the layout gives
+                // this Text its full wrapped height (a fixed height made the
+                // layout compress it and Slint elided the last line mid-word).
+                vertical-stretch: root.compact ? 0 : 1;
                 text: root.note.preview;
                 font-size: 12px;
                 font-weight: 400;
@@ -1091,10 +1101,11 @@ export component EmptyState inherits VerticalLayout {
 
     HorizontalLayout {
         alignment: center;
-        IconGhost {
-            preferred-width: 64px;
-            preferred-height: 64px;
-            stroke-color: Theme.text-faint;
+        IconBrandThin {
+            preferred-width: 72px;
+            preferred-height: 72px;
+            opacity: 0.22;
+            stroke-color: Theme.text-dim;
         }
     }
     Text {

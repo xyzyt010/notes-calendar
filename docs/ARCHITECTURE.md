@@ -700,7 +700,29 @@ synthetic evidence.
   bytes and `calendar.exe` 12,211,200 bytes — all ≤ 20 MB.
   `cargo test --workspace` (ycore 15/15) and workspace clippy green.
   Visible instance on Mint `DISPLAY=:0` runs the release binary with
-  the test profile. **Known remaining gaps:** search-result `<mark>`
+  the test profile.
+* **Parity loops, third pass (2026-11-25, side-by-side at the user's real
+  1536x864 vs Brave kiosk on the static copy/stub)** — brand mark: the
+  Lucide ghost was replaced everywhere by the webapp's exact yellow
+  scribble (`IconBrand`, stroke 2.2; `IconBrandThin` 1.5 for the empty
+  state; `apps/shared-ui/icons.slint`) and `assets/app-icon.png` (+128)
+  regenerated from `favicon.svg` (#121212 bg, #FDD663 stroke 2.4).
+  Card previews are raw body text again — the web shows markdown
+  literally (`# Welcome`, `**Ctrl+N**`, `- Trim…`); `note_to_data` had
+  re-stripped them after `model.rs` deliberately kept them raw. Preview
+  `Text` now stretches in the layout instead of a fixed height (the fixed
+  height let the layout compress it and Slint elide the last line
+  mid-word, e.g. "Follow-…"); height estimator body line 18→23 to match
+  the measured 21.6 px line pitch. Titles wrap like web `pre-wrap`
+  (were single-line elide; pin slot collapses to 0 when unpinned so
+  titles get full width). Topbar sign-out icon added (web logout maps
+  to native lock-now; with no vault configured it is a no-op since there
+  is nothing to lock — the app is already local-only, and `refresh_list`
+  derives `vault_locked` from `vault_cfg`). All verified 1536x864 native-vs-web: brand,
+  composer, rail, Pinned/Others rows, raw previews, wrap titles,
+  tall Fleet cards.
+  `cargo test --workspace` (ycore 15/15) and clippy green.
+  **Known remaining gaps:** search-result `<mark>`
   highlighting (web `--mark-bg`) is not rendered — Slint plain `Text`
   has no per-span background and `StyledText` segments cannot be built
   publicly; filtering itself is exact. Long checklist items in the

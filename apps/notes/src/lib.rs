@@ -451,7 +451,7 @@ fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32, card_w:
     } else {
         ((title_chars as f32) / title_cpl).ceil() as usize
     }
-    .clamp(0, 2);
+    .clamp(0, 3);
     // Count explicit lines plus soft-wrapped continuation lines from the real card width.
     let cpl = ((card_w - 36.0) / 7.0).floor().max(18.0);
     let mut body_lines: usize = 0;
@@ -469,8 +469,10 @@ fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32, card_w:
         body_lines = 2;
     }
     // Web content height: pad 24 + title margin 4 + body margin 10 + actions 32 = 70
-    // plus title lines (23.1) and body lines (18). Verified: Meeting 147, Sprint 219.
-    (70.0 + title_lines as f32 * 23.0 + body_lines as f32 * 18.0).clamp(120.0, 1000.0)
+    // plus title lines (23.1) and body lines (23; Slint line pitch at 12px/1.5
+    // measures 21.6, +margin so the stretched Text never clips).
+    // Verified: Meeting 162, Sprint 234.
+    (70.0 + title_lines as f32 * 23.0 + body_lines as f32 * 23.0).clamp(120.0, 1000.0)
 }
 
 fn editor_body_height_px(body: &str, width_px: f32) -> f32 {
@@ -775,7 +777,6 @@ fn is_strict_checklist(body: &str) -> bool {
 fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>) -> NoteData {
     let title = s.title.as_str();
     let preview = s.preview.as_str();
-    let plain_preview = ycore::model::strip_markdown(preview);
     let checklist_items = checklist_preview_items(preview, title, card_w);
     let is_checklist = !checklist_items.is_empty();
     let checklist_extra = if is_checklist { (checklist_items.len().saturating_sub(1) as f32) * 5.0 } else { 0.0 };
@@ -785,14 +786,16 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         is_checklist,
         id: s.id.to_string().into(),
         title: title.into(),
-        preview: plain_preview.clone().into(),
+        // Web parity: card previews are the raw body text (markdown shown
+        // literally, e.g. "# Welcome", "**Ctrl+N**"; app.js keeps newlines).
+        preview: preview.into(),
         date_label: rel_time(s.updated_at).into(),
         pinned: s.pinned,
         favorite: s.favorite,
         word_count: 0,
         color_index: color_index(&s.color),
         image_count: s.image_count as i32,
-        card_height: (estimate_card_height_px(title, &plain_preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
+        card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
         preview_styled: styled_markdown(preview),
     }
@@ -1531,6 +1534,10 @@ fn create_note_from_composer(state: &mut AppState, ui: &MainWindow) -> Option<Uu
 }
 
 fn lock_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
+    // No vault configured => nothing to lock: the app is local-only and
+    // already "signed in" (refresh_list derives vault_locked from
+    // vault_cfg, so forcing the lock screen here would be undone anyway).
+    if !state.borrow().vault_cfg.enabled { return; }
     flush_note(state, ui);
     {
         let mut s = state.borrow_mut();
