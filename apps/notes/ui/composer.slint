@@ -4,7 +4,7 @@
 import { Theme } from "../../shared-ui/theme.slint";
 import {
     IconPin, IconPinFilled, IconPalette, IconImage, IconPencil, IconSquareCheck,
-    IconFileText, IconX, IconTrash, IconPlus,
+    IconMarkdown, IconX, IconTrash, IconPlus,
 } from "../../shared-ui/icons.slint";
 import {
     IconButton, NoteImageData, ChecklistItemData, TextButton, NoteCheckBox,
@@ -98,7 +98,7 @@ export component NewNoteComposer inherits Rectangle {
                         edited => { root.content-changed(); }
                     }
                     if root.body == "":
-                        Text { width: 100%; height: 100%; vertical-alignment: center; text: "Take a note…  (Markdown supported)"; font-size: 16px; color: Theme.placeholder; wrap: no-wrap; }
+                        Text { width: 100%; height: 100%; vertical-alignment: center; text: "Take a note… (Markdown supported)"; font-size: 16px; color: Theme.placeholder; wrap: no-wrap; }
                 }
             if root.preview-mode:
                 previewPane := Rectangle {
@@ -183,7 +183,7 @@ export component NewNoteComposer inherits Rectangle {
                 IconButton { size: 40px; clicked => { root.image-requested(); } IconImage { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                 IconButton { size: 40px; clicked => { root.draw-requested(); } IconPencil { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                 IconButton { selected: root.checklist-mode; size: 40px; clicked => { root.checklist-toggle(); } IconSquareCheck { stroke-color: root.checklist-mode ? Theme.text : Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                IconButton { selected: root.preview-mode; size: 40px; clicked => { root.preview-toggle(); } IconFileText { stroke-color: root.preview-mode ? Theme.text : Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                IconButton { selected: root.preview-mode; size: 40px; clicked => { root.preview-toggle(); } IconMarkdown { stroke-color: root.preview-mode ? Theme.text : Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                 Rectangle {}
                 TextButton { label: "Close"; text-only: true; clicked => { root.close-requested(); } }
             }

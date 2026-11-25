@@ -217,7 +217,7 @@ export component IconList inherits Path {
 export component IconEye inherits Path {
     in property <color> stroke-color: #e8eaed;
     stroke: stroke-color;
-    stroke-width: 2px;
+    stroke-width: 1.7px;
     stroke-line-cap: round;
     stroke-line-join: round;
     viewbox-width: 24;
@@ -226,6 +226,22 @@ export component IconEye inherits Path {
     horizontal-stretch: 0;
     vertical-stretch: 0;
     commands: "M 15 12 A 3 3 0 1 0 9 12 A 3 3 0 1 0 15 12 Z M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z";
+    preferred-width: 24px;
+    preferred-height: 24px;
+}
+
+export component IconEyeOff inherits Path {
+    in property <color> stroke-color: #e8eaed;
+    stroke: stroke-color;
+    stroke-width: 1.7px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    fit: contain;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    commands: "M 15 12 A 3 3 0 1 0 9 12 A 3 3 0 1 0 15 12 Z M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M 4.4 19.6 L 19.6 4.4";
     preferred-width: 24px;
     preferred-height: 24px;
 }
@@ -292,6 +308,40 @@ export component IconFileText inherits Path {
     horizontal-stretch: 0;
     vertical-stretch: 0;
     commands: "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z M14 2v5a1 1 0 0 0 1 1h5 M10 9H8 M16 13H8 M16 17H8";
+    preferred-width: 24px;
+    preferred-height: 24px;
+}
+
+export component IconMarkdown inherits Path {
+    in property <color> stroke-color: #e8eaed;
+    stroke: transparent;
+    stroke-width: 0px;
+    fill: stroke-color;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    fit: contain;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    commands: "M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5A1.5 1.5 0 0 0 11.5 2h-7A1.5 1.5 0 0 0 3 3.5v7A1.5 1.5 0 0 0 4.5 12H7v4h1v2h2.5v-2h1v-4h2.05L12.5 16.5l-1.4.4L9.7 13h1.6l1.1 2 1.1-2h1.6l-1.35 3.9a1.5 1.5 0 0 1-1.1 1.05L12.5 21h2.5v-2h1v-4h1.5c.83 0 1.5-.67 1.5-1.5V12c0-.55-.67-1-1.5-1z";
+    preferred-width: 24px;
+    preferred-height: 24px;
+}
+
+export component IconEmptyTrash inherits Path {
+    in property <color> stroke-color: #e8eaed;
+    stroke: transparent;
+    stroke-width: 0px;
+    fill: stroke-color;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    fit: contain;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    commands: "M15 16h4v2h-5v-2zm1-15h-2v5h2V1zm-5 15h4v2H9v-2zm1-5c0 1.3.84 2.4 2 2.81V19h2v-2.19c.25-.09.48-.21.7-.36L18.9 18l1.4-1.4-2.74-2.74c.22-.42.34-.9.34-1.36 0-1.66-1.34-3-3-3s-3 1.34-3 3zM13 8h4V6h-5v2zm-6 8h4v-2H8v2zm-3 0h2v-2H7l-3-3v5h2v-1.05L8 16z";
     preferred-width: 24px;
     preferred-height: 24px;
 }

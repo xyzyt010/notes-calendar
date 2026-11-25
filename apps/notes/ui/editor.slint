@@ -167,7 +167,7 @@ export component EditorPane inherits Rectangle {
                             horizontal-stretch: 1;
                         }
                         Text {
-                            text: root.find-query == "" ? "" : (root.find-count == 0 ? "No matches" : (root.find-index + 1) + " / " + root.find-count);
+                            text: root.find-query == "" ? "" : (root.find-count == 0 ? "0 of 0" : (root.find-index + 1) + " of " + root.find-count);
                             font-size: 12px;
                             color: Theme.text-dim;
                             vertical-alignment: center;
@@ -343,7 +343,7 @@ export component EditorPane inherits Rectangle {
             }
 
             if root.editor-body == "" && !root.checklist-mode:
-                Text { x: 20px; width: parent.width - 40px; text: "Start typing…  Markdown is supported."; font-size: 15px; color: Theme.text-faint; }
+                Text { x: 20px; width: parent.width - 40px; text: "Take a note… (Markdown supported)"; font-size: 15px; color: Theme.placeholder; }
         }
 
         // ===== Footer (web .editor-actions) =====

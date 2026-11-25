@@ -16,11 +16,11 @@ export global Theme {
     in-out property <bool> neo: false;
 
     // ---- Backgrounds (Google Keep — matches the deployed site exactly) ----
-    out property <color> bg:            neo ? #202124 : (dark ? #121212 : #FFFFFF);
-    out property <color> surface:       neo ? #202124 : (dark ? #1B1B1B : #F1F3F4);
-    out property <color> surface-2:     neo ? #23262D : (dark ? #2A2B2D : #F1F3F4);
-    out property <color> surface-3:     neo ? #2A2D34 : (dark ? #333639 : #E8EAED);
-    out property <color> card-bg:       neo ? #202124 : (dark ? #1F1F1F : #FFFFFF);  // cards & composer
+    out property <color> bg:            neo ? (dark ? #202124 : #E8EAED) : (dark ? #121212 : #FFFFFF);
+    out property <color> surface:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1B1B1B : #F1F3F4);
+    out property <color> surface-2:     neo ? (dark ? #23262D : #E8EAED) : (dark ? #2A2B2D : #F1F3F4);
+    out property <color> surface-3:     neo ? (dark ? #2A2D34 : #E8EAED) : (dark ? #333639 : #E8EAED);
+    out property <color> card-bg:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1F1F1F : #FFFFFF);  // cards & composer
     out property <color> neo-card:      #202124;
     out property <color> neo-raised:    #23262D;
     out property <color> neo-inset:     #14161A;
@@ -28,15 +28,15 @@ export global Theme {
     out property <color> border-strong: dark ? #5F6368 : #C7C9CC;
     out property <color> divider:       dark ? #2C2D2F : #E8EAED;  // hairline separators
     out property <color> icon-hover-bg: dark ? rgba(255,255,255,0.10) : rgba(95,99,104,0.08);
-    out property <color> drawer-bg:     neo ? #202124 : (dark ? #1B1B1B : #FFFFFF);
+    out property <color> drawer-bg:     neo ? (dark ? #202124 : #E8EAED) : (dark ? #1B1B1B : #FFFFFF);
     out property <color> drawer-active: dark ? #47484C : #FDD663;
 
     out property <color> scrim:         dark ? #00000099 : rgba(32,33,36,0.4);   // modal overlay
 
     // ---- Text ----
-    out property <color> text:          dark ? #e8eaed : #1f2022;
+    out property <color> text:          dark ? #e8eaed : #202124;
     out property <color> text-dim:      dark ? #9aa0a6 : #5f6368;
-    out property <color> text-faint:    dark ? #8a919c : #a3a7ad;
+    out property <color> text-faint:    dark ? #9aa0a6 : #5f6368;
     out property <color> card-title-ink: dark ? #ffffff : #202124;  // --card-title-ink
     out property <color> card-body-ink:  dark ? #c7ccd1 : #5f6368;  // --card-body-ink
 
@@ -76,8 +76,8 @@ export global Theme {
         if idx == 3 { return Theme.n-yellow; }
         if idx == 4 { return Theme.n-green; }
         if idx == 5 { return Theme.n-cyan; }
-        if idx == 6 { return Theme.n-darkblue; }
-        if idx == 7 { return Theme.n-lightblue; }
+        if idx == 6 { return Theme.n-lightblue; }
+        if idx == 7 { return Theme.n-darkblue; }
         if idx == 8 { return Theme.n-purple; }
         if idx == 9 { return Theme.n-pink; }
         if idx == 10 { return Theme.n-brown; }

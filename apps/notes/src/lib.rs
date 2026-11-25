@@ -20,7 +20,7 @@ use ycore::storage::{notes as notes_store, open_notes_db};
 /// Canonical note-card background colors (Keep-style dark palette, matches web).
 /// Index in this array == (note color index - 1). Stored on the Note.color field.
 const NOTE_COLOR_HEX: [&str; 11] = [
-    "#5C2B29", "#614A19", "#635D18", "#345920", "#16504B", "#1E3A5F", "#2D555E", "#42275E", "#5B2245", "#442F19", "#2C2D2F",
+    "#5C2B29", "#614A19", "#635D18", "#345920", "#16504B", "#2D555E", "#1E3A5F", "#42275E", "#5B2245", "#442F19", "#2C2D2F",
 ];
 
 fn color_index(color: &Option<String>) -> i32 {
@@ -971,7 +971,7 @@ fn all_graph_notes(state: &AppState) -> Vec<ycore::model::Note> {
     let mut out = Vec::new();
     for id in list_all_ids(state) {
         let Some(note) = get_from_state(state, id) else { continue };
-        if note.trashed { continue; }
+        if note.trashed || note.archived { continue; }
         out.push(note);
     }
     out.sort_by_key(|n| std::cmp::Reverse(n.updated_at));
@@ -1163,10 +1163,23 @@ fn set_find_selection(ui: &MainWindow, offset: usize, length: usize) {
 }
 
 fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
-    let (first_id, selected_id) = {
+    let selected_id = {
         let s = state.borrow();
         let key = s.vault_key.clone();
-        let list = notes_store::list_notes_with_key(&s.db, &s.list_filter(), key.as_ref()).unwrap_or_default();
+        // Web vaultPool: every non-trashed, non-archived note, A–Z by title,
+        // independent of the board view/sort/search.
+        let pool_filter = notes_store::ListFilter {
+            folder_id: None,
+            tag: None,
+            archived: false,
+            trashed: false,
+            favorites_only: false,
+            query: None,
+            sort: s.prefs.sort,
+            limit: 600,
+        };
+        let mut list = notes_store::list_notes_with_key(&s.db, &pool_filter, key.as_ref()).unwrap_or_default();
+        list.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
         let prefs = s.prefs.clone();
         let vault_filter = ui.get_vault_filter().to_string().trim().to_lowercase();
         let data: Vec<NoteData> = list
@@ -1174,19 +1187,14 @@ fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
             .filter(|n| vault_filter.is_empty() || n.title.to_lowercase().contains(&vault_filter) || n.preview.to_lowercase().contains(&vault_filter))
             .map(|n| note_to_data(n, &prefs, 400.0, Vec::new(), ""))
             .collect();
-        let first = data.first().and_then(|n| Uuid::parse_str(&n.id).ok());
         ui.set_vault_notes(ModelRc::new(VecModel::from(data)));
-        let parsed = Uuid::parse_str(&ui.get_vault_selected_id()).ok();
-        (first, parsed)
+        Uuid::parse_str(&ui.get_vault_selected_id()).ok()
     };
 
+    // Web starts with no selection ("Select a note…"); never auto-select.
     if selected_id.is_none() {
-        if let Some(id) = first_id {
-            apply_vault_selection(state, ui, id);
-        } else {
-            ui.set_vault_has_note(false);
-            ui.set_vault_selected_id(SharedString::new());
-        }
+        ui.set_vault_has_note(false);
+        ui.set_vault_selected_id(SharedString::new());
     }
 }
 
@@ -1205,7 +1213,12 @@ fn apply_vault_selection(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uui
     ui.set_vault_selected_id(id.to_string().into());
     ui.set_vault_has_note(true);
     ui.set_vault_title(note.title.clone().into());
-    ui.set_vault_meta(shared(format!("Created {} · Last edited {}", note.created_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p"), note.updated_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p"))));
+    ui.set_vault_meta(shared(format!(
+        "{} · {} characters · {}",
+        note.updated_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p"),
+        note.body.chars().count(),
+        if note.archived { "Archived" } else { "Notes" }
+    )));
     ui.set_vault_source(note.body.clone().into());
     ui.set_vault_markdown(styled_markdown(&note.body));
     ui.set_vault_pinned(note.pinned);

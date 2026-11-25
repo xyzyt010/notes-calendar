@@ -4,7 +4,7 @@
 import { Theme } from "../../shared-ui/theme.slint";
 import { AboutSlint } from "std-widgets.slint";
 import {
-    IconBrand, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash, IconLogout,
+    IconBrand, IconMenu, IconPlus, IconPin, IconStar, IconArchive, IconTrash, IconLogout, IconEmptyTrash,
     IconSettings, IconMoon, IconSun, IconLayoutGrid, IconList, IconImage, IconPencil, IconDownload,
     IconFileText, IconFolder, IconFolderPlus, IconTag, IconPanelLeft, IconLink2, IconLock,
 } from "../../shared-ui/icons.slint";
@@ -61,8 +61,8 @@ export component MainWindow inherits Window {
     in-out property <int> sort-setting: 0;
     in-out property <bool> pinned-first: true;
     in-out property <bool> md-cards: false;
-    in-out property <bool> show-dates: true;
-    in-out property <int> card-clamp: 5;
+    in-out property <bool> show-dates: false;
+    in-out property <int> card-clamp: 0;
     in-out property <int> note-count: 0;
     in-out property <int> grid-cols: 4;
     in-out property <bool> rail-hover: false;
@@ -314,31 +314,31 @@ export component MainWindow inherits Window {
     callback settings-clamp-selected(int);
 
     changed width => {
-        root.compact = self.width < 880px;
+        root.compact = self.width <= 720px;
         if root.density-setting == 0 {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         } else if root.density-setting == 2 {
-            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
         } else {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         }
     }
     changed density-setting => {
         if root.density-setting == 0 {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         } else if root.density-setting == 2 {
-            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
         } else {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         }
     }
     changed mobile-two => {
         if root.density-setting == 0 {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         } else if root.density-setting == 2 {
-            root.grid-cols = self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1100px ? 1 : self.width < 1500px ? 2 : 3;
         } else {
-            root.grid-cols = self.width < 880px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
+            root.grid-cols = self.width <= 720px ? (root.mobile-two ? 2 : 1) : self.width < 1250px ? 3 : self.width < 1650px ? 4 : 5;
         }
     }
     changed grid-cols => { root.refresh-masonry(); }
@@ -381,16 +381,16 @@ export component MainWindow inherits Window {
             if event.modifiers.control && event.text == "z" && root.doodle-open { root.doodle-undo(); return accept; }
             if event.text == "\u{1b}" {
                 if root.doodle-open { root.doodle-cancel(); return accept; }
-                if root.has-note && !root.compact { root.back-to-list(); return accept; }
-                if root.show-settings { root.show-settings = false; return accept; }
+                if root.image-preview-open { root.close-image-preview(); return accept; }
                 if root.timestamps-open { root.timestamps-open = false; return accept; }
                 if root.show-markdown-guide { root.show-markdown-guide = false; return accept; }
-                if root.image-preview-open { root.close-image-preview(); return accept; }
                 if root.editor-find-open { root.close-find(); return accept; }
                 if root.folder-menu-open { root.folder-menu-open = false; return accept; }
                 if root.color-popover-open { root.color-popover-open = false; return accept; }
                 if root.editor-more-popover-open { root.editor-more-popover-open = false; return accept; }
                 if root.composer-color-popover-open { root.composer-color-popover-open = false; return accept; }
+                if root.has-note && !root.compact { root.back-to-list(); return accept; }
+                if root.show-settings { root.show-settings = false; return accept; }
                 if root.search-text != "" { root.search-changed(""); return accept; }
                 if root.compact && root.has-note { root.back-to-list(); return accept; }
                 return accept;
@@ -421,7 +421,7 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     // ===== TOP BAR (webapp parity: hamburger · logo · search · actions) =====
                     Rectangle {
-                        height: Theme.topbar-height;
+                        height: root.compact ? 56px : Theme.topbar-height;
                         background: Theme.surface;
                         topbarLayout := HorizontalLayout {
                             padding-left: 12px;
@@ -435,7 +435,7 @@ export component MainWindow inherits Window {
                                 IconMenu { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; }
                             }
                             brand := HorizontalLayout {
-                                visible: root.width >= 480px;
+                                visible: root.width > 720px;
                                 spacing: 10px;
                                 padding-left: 4px;
                                 padding-right: 10px;
@@ -450,9 +450,9 @@ export component MainWindow inherits Window {
                             }
                             Rectangle { horizontal-stretch: 1; }
                             searchWrap := Rectangle {
-                                visible: root.width >= 640px;
+                                visible: !root.show-settings;
                                 width: min(720px, parent.width - 240px);
-                                height: 52px;
+                                height: root.compact ? 44px : 52px;
                                 SearchBar {
                                     width: 100%;
                                     text <=> root.search-text;
@@ -482,13 +482,15 @@ export component MainWindow inherits Window {
                     if root.vault-mismatch:
                         Rectangle {
                             height: 42px;
-                            background: Theme.danger-soft;
+                            background: root.dark ? #5C2B29 : #FCE8E6;
+                            border-width: 1px;
+                            border-color: root.dark ? #8A4A47 : #F28B82;
                             HorizontalLayout {
                                 padding-left: 16px;
                                 padding-right: 12px;
                                 spacing: 10px;
-                                VerticalLayout { alignment: center; IconLock { stroke-color: Theme.danger; preferred-width: 19px; preferred-height: 19px; } }
-                                Text { text: "Wrong password on this device — your notes can't be decrypted."; font-size: 12px; color: Theme.danger; vertical-alignment: center; horizontal-stretch: 1; }
+                                VerticalLayout { alignment: center; IconLock { stroke-color: root.dark ? #FCD9D9 : #A50E0E; preferred-width: 19px; preferred-height: 19px; } }
+                                Text { text: "Wrong password on this device — your notes can't be decrypted. Sign out and sign in again with the correct password."; font-size: 13px; color: root.dark ? #FCD9D9 : #A50E0E; vertical-alignment: center; horizontal-stretch: 1; }
                                 TextButton { label: "Unlock correctly"; clicked => { root.lock-now(); } }
                             }
                         }
@@ -528,30 +530,30 @@ export component MainWindow inherits Window {
                                         sideColumn := VerticalLayout {
                                             spacing: 2px;
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.note-count + ""; clicked => { root.view-selected(0); root.layout-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.note-count + ""; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
-                                                RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); root.layout-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                                                RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: ""; clicked => { root.layout-selected(0); root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: ""; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
-                                                RailRow { selected: root.active-view == 1; clicked => { root.layout-selected(0); root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                                                RailRow { selected: root.active-view == 1; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: ""; clicked => { root.layout-selected(0); root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: ""; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
-                                                RailRow { selected: root.active-view == 3; clicked => { root.layout-selected(0); root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                                                RailRow { selected: root.active-view == 3; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: ""; clicked => { root.layout-selected(0); root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: ""; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
-                                                RailRow { selected: root.active-view == 4; clicked => { root.layout-selected(0); root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                                                RailRow { selected: root.active-view == 4; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             // web .drawer-sep spacing
                                             Rectangle { height: 8px; }
                                             if root.active-view == 4 && root.note-count > 0:
                                                 trashWrap := VerticalLayout {
                                                     spacing: 2px;
                                                     if root.sidebar-open || root.rail-hover:
-                                                        SidebarRow { labels: true; label: "Empty trash"; meta: ""; clicked => { root.show-empty-trash = true; } IconTrash { stroke-color: Theme.danger; preferred-width: 20px; preferred-height: 20px; } }
+                                                        SidebarRow { labels: true; label: "Empty trash"; meta: ""; clicked => { root.show-empty-trash = true; } IconEmptyTrash { stroke-color: Theme.danger; preferred-width: 20px; preferred-height: 20px; } }
                                                     if !(root.sidebar-open || root.rail-hover):
-                                                        RailRow { danger: true; clicked => { root.show-empty-trash = true; } IconTrash { stroke-color: Theme.danger; preferred-width: 22px; preferred-height: 22px; } }
+                                                        RailRow { danger: true; clicked => { root.show-empty-trash = true; } IconEmptyTrash { stroke-color: Theme.danger; preferred-width: 22px; preferred-height: 22px; } }
                                                 }
                                             Rectangle { height: 8px; }
                                             if root.sidebar-open || root.rail-hover:
@@ -563,7 +565,7 @@ export component MainWindow inherits Window {
                                                 extras := VerticalLayout {
                                                     spacing: 2px;
                                                     Divider {}
-                                                    SidebarRow { labels: true; selected: root.active-view == 2; label: "Favorites"; meta: ""; clicked => { root.layout-selected(0); root.view-selected(2); } IconStar { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                    SidebarRow { labels: true; selected: root.active-view == 2; label: "Favorites"; meta: ""; clicked => { root.view-selected(2); } IconStar { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                                     SidebarRow { labels: true; selected: root.layout-style == 2; label: "Vault"; meta: ""; clicked => { root.layout-selected(2); } IconPanelLeft { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                                     SidebarRow { labels: true; selected: root.layout-style == 4; label: "Graph"; meta: ""; clicked => { root.layout-selected(4); } IconLink2 { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                                     SidebarRow { labels: true; label: Theme.dark ? "Light" : "Dark"; meta: ""; clicked => { root.toggle-theme(); } IconMoon { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }

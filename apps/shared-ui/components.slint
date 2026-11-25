@@ -409,7 +409,7 @@ export component SearchBar inherits Rectangle {
     changed focus-token => { input.focus(); }
 
     height: 52px;
-    border-radius: 14px;
+    border-radius: 10px;
     background: input.has-focus ? (Theme.dark ? Theme.surface-3 : #FFFFFF) : Theme.surface-2;
     border-width: 0px;
     animate background { duration: 150ms; easing: ease-out; }
@@ -436,7 +436,7 @@ export component SearchBar inherits Rectangle {
             font-weight: 400;
             color: Theme.text;
             vertical-alignment: center;
-            selection-background-color: Theme.accent-soft;
+            selection-background-color: Theme.mark-bg;
             selection-foreground-color: Theme.text;
             single-line: true;
             edited => { root.submitted(); }
@@ -1141,15 +1141,16 @@ export component TextButton inherits Rectangle {
     height: root.text-only ? 40px : 38px;
     min-width: root.text-only ? 0px : 76px;
     horizontal-stretch: 0;
-    border-radius: root.text-only ? 9px : Theme.r-md;
+    border-radius: root.text-only ? 9px : 9px;
     background: root.text-only
         ? (ta.has-hover ? Theme.icon-hover-bg : transparent)
         : root.danger
             ? (ta.has-hover ? Theme.danger-soft : Theme.danger-soft)
             : (root.emphasis
-                ? (ta.has-hover ? Theme.accent : Theme.accent)
+                ? (ta.has-hover ? (Theme.dark ? #2A2B2D : #F1F3F4) : (Theme.dark ? #1F1F1F : #FFFFFF))
                 : (ta.has-hover ? Theme.surface-3 : Theme.surface-2));
-    border-width: 0px;
+    border-width: root.emphasis ? 1px : 0px;
+    border-color: Theme.border;
     animate background { duration: 150ms; easing: ease-out; }
 
     ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
@@ -1162,7 +1163,7 @@ export component TextButton inherits Rectangle {
             text: root.label;
             font-size: root.text-only ? 14px : 13.5px;
             font-weight: root.text-only ? 500 : 600;
-            color: root.danger ? Theme.danger : (root.text-only ? (ta.has-hover ? Theme.text : Theme.text-dim) : (root.emphasis ? Theme.on-accent : Theme.text));
+            color: root.danger ? Theme.danger : (root.text-only ? (ta.has-hover ? Theme.text : Theme.text-dim) : (root.emphasis ? (Theme.dark ? #E8EAED : #3C4043) : Theme.text));
             horizontal-alignment: center;
         }
     }

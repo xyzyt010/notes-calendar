@@ -2,7 +2,7 @@
 
 import { Theme } from "../../shared-ui/theme.slint";
 import {
-    IconGhost, IconLock, IconEye,
+    IconGhost, IconLock, IconEye, IconEyeOff, IconBrand,
 } from "../../shared-ui/icons.slint";
 import {
     IconButton, TextButton,
@@ -28,16 +28,19 @@ export component UnlockOverlay inherits Rectangle {
         HorizontalLayout {
             alignment: center;
             Rectangle {
-                width: min(430px, parent.width - 48px);
+                width: min(400px, parent.width - 48px);
                 height: card.preferred-height;
-                border-radius: Theme.r-xl;
-                background: Theme.surface;
+                border-radius: 16px;
+                background: Theme.card-bg;
                 border-width: 1px;
-                border-color: Theme.border-strong;
+                border-color: Theme.border;
                 drop-shadow-blur: 30px;
                 drop-shadow-color: #00000070;
                 card := VerticalLayout {
-                    padding: 28px;
+                    padding-left: 42px;
+                    padding-right: 42px;
+                    padding-top: 46px;
+                    padding-bottom: 32px;
                     spacing: 12px;
                     alignment: center;
 
@@ -46,15 +49,15 @@ export component UnlockOverlay inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             if root.mode == 1:
-                                IconLock { stroke-color: Theme.accent; preferred-width: 42px; preferred-height: 42px; }
+                                IconLock { stroke-color: Theme.text; preferred-width: 56px; preferred-height: 56px; }
                             if root.mode == 0:
-                                IconGhost { stroke-color: Theme.accent; preferred-width: 42px; preferred-height: 42px; }
+                                IconBrand { stroke-color: Theme.text; preferred-width: 56px; preferred-height: 56px; }
                         }
                     }
                     Text {
                         text: root.mode == 1 ? "Unlock" : "Create your vault";
-                        font-size: 26px;
-                        font-weight: 650;
+                        font-size: 28px;
+                        font-weight: 400;
                         color: Theme.text;
                         horizontal-alignment: center;
                     }
@@ -69,11 +72,11 @@ export component UnlockOverlay inherits Rectangle {
                     }
                     Rectangle { height: 4px; }
                     Rectangle {
-                        height: 46px;
-                        border-radius: Theme.r-md;
-                        background: Theme.surface-2;
-                        border-width: 1px;
-                        border-color: passwordInput.has-focus ? Theme.accent : transparent;
+                        height: 52px;
+                        border-radius: 10px;
+                        background: transparent;
+                        border-width: passwordInput.has-focus ? 2px : 1px;
+                        border-color: passwordInput.has-focus ? Theme.icon : Theme.border;
                         passwordInput := TextInput {
                             x: 14px;
                             width: parent.width - 54px;
@@ -93,18 +96,23 @@ export component UnlockOverlay inherits Rectangle {
                             }
                         }
                         IconButton {
-                            x: parent.width - 44px;
-                            y: 4px;
-                            size: 38px;
+                            x: parent.width - 42px;
+                            y: 8px;
+                            size: 36px;
                             clicked => { root.show-password = !root.show-password; }
-                            IconEye { stroke-color: Theme.text-dim; preferred-width: 18px; preferred-height: 18px; }
+                            if root.show-password:
+                                IconEye { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; }
+                            if !root.show-password:
+                                IconEyeOff { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; }
                         }
                     }
                     if root.mode == 0:
                         Rectangle {
-                            height: 46px;
-                            border-radius: Theme.r-md;
-                            background: Theme.surface-2;
+                            height: 52px;
+                            border-radius: 10px;
+                            background: transparent;
+                            border-width: confirmInput.has-focus ? 2px : 1px;
+                            border-color: confirmInput.has-focus ? Theme.icon : Theme.border;
                             confirmInput := TextInput {
                                 x: 14px;
                                 width: parent.width - 28px;
@@ -124,8 +132,8 @@ export component UnlockOverlay inherits Rectangle {
                     if root.error != "":
                         Text {
                             text: root.error;
-                            font-size: 12px;
-                            color: Theme.danger;
+                            font-size: 13px;
+                            color: #D93025;
                             wrap: word-wrap;
                         }
                     TextButton {
