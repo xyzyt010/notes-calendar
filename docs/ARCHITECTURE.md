@@ -725,6 +725,8 @@ synthetic evidence.
   **Known remaining gaps:** search-result `<mark>`
   highlighting (web `--mark-bg`) is not rendered — Slint plain `Text`
   has no per-span background and `StyledText` segments cannot be built
-  publicly; filtering itself is exact. Long checklist items in the
-  editor stay single-line (web wraps). Everything else looped this pass
+  publicly; filtering itself is exact. (`strip_markdown` is kept for
+  search snippets only; checklist editing inputs are single-line on both
+  sides — web uses `<input type=text>` — and card checklist rows wrap on
+  both sides.) Everything else looped this pass
   matched the web reference.
