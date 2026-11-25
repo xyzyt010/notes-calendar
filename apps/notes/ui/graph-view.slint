@@ -29,7 +29,7 @@ export component GraphView inherits Rectangle {
     callback unlink-all();
     callback link-clicked(string);
 
-    background: Theme.bg;
+    background: #000000;
     clip: true;
 
     graphTouch := TouchArea {
@@ -57,7 +57,7 @@ export component GraphView inherits Rectangle {
         }
     }
 
-    // links (behind nodes)
+    // links (behind nodes) — depth-faded for 3D parallax feel
     for link[i] in root.links:
         Path {
             x: 0;
@@ -68,24 +68,26 @@ export component GraphView inherits Rectangle {
             viewbox-height: parent.height / 1px;
             fit: preserve;
             commands: link.commands;
+            opacity: link.active ? 1.0 : 0.22 + link.depth * 0.62;
             stroke: link.active ? Theme.accent : Theme.text-faint;
-            stroke-width: link.active ? 2.5px : 1px;
+            stroke-width: link.active ? 2.5px : 0.75px + link.depth * 1.35px;
             fill: transparent;
         }
 
-    // nodes
+    // nodes — painted far-to-near (Rust sorts), depth-dimmed for 3D parallax
     for node[i] in root.nodes:
         Rectangle {
             x: node.x - node.radius;
             y: node.y - node.radius;
             width: node.radius * 2;
             height: node.radius * 2;
+            opacity: node.active ? 1.0 : 0.55 + node.depth * 0.45;
             border-radius: self.width / 2;
             background: node.active ? Theme.accent : (node.linked > 0 ? Theme.neo-raised : Theme.surface-3);
             border-width: node.active ? 2px : 1px;
             border-color: node.active ? Theme.on-accent : Theme.border-strong;
             drop-shadow-blur: node.active ? 18px : 8px;
-            drop-shadow-color: node.active ? #FDD66366 : #00000055;
+            drop-shadow-color: node.active ? #AECBFA66 : #00000055;
             Text {
                 text: node.radius > 10px ? node.title : "";
                 font-size: 10px;
@@ -101,20 +103,19 @@ export component GraphView inherits Rectangle {
         }
 
     Rectangle {
-        x: 18px;
-        y: parent.height - 48px;
-        height: 34px;
-        width: min(680px, parent.width - 36px);
-        border-radius: 17px;
-        background: Theme.surface-2;
+        x: 0px;
+        y: parent.height - 42px;
+        height: 42px;
+        width: 100%;
+        background: #0000008C;
         HorizontalLayout {
-            padding-left: 14px;
-            padding-right: 8px;
+            padding-left: 16px;
+            padding-right: 16px;
             spacing: 12px;
             Text {
-                text: "drag to rotate · scroll to zoom · drop a node on another to link them · Alt+drop on empty space to unlink all · click to read, double-click to open";
-                font-size: 11px;
-                color: Theme.text-dim;
+                text: "drag to rotate · scroll to zoom · drop a node on another to link them · Alt+drop on empty space to unlink all · click a node to read it, double-click to open";
+                font-size: 11.5px;
+                color: #FFFFFF99;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
                 overflow: elide;
@@ -125,9 +126,9 @@ export component GraphView inherits Rectangle {
 
     if root.has-selection:
         panel := Rectangle {
-            x: parent.width - 330px;
-            y: 18px;
-            width: 300px;
+            x: parent.width - min(360px, parent.width - 32px) - 16px;
+            y: 16px;
+            width: min(360px, parent.width - 32px);
             height: min(560px, parent.height - 36px);
             border-radius: Theme.r-lg;
             background: Theme.surface;
@@ -142,7 +143,7 @@ export component GraphView inherits Rectangle {
                     h := Text {
                         text: root.selected-title == "" ? "Untitled" : root.selected-title;
                         font-size: 17px;
-                        font-weight: 650;
+                        font-weight: 500;
                         color: Theme.text;
                         vertical-alignment: center;
                         horizontal-stretch: 1;

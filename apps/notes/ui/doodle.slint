@@ -2,7 +2,7 @@
 
 import { Theme } from "../../shared-ui/theme.slint";
 import {
-    IconX, IconUndo2, IconTrash, IconCheck,
+    IconX, IconDoodleUndo, IconTrash, IconCheck,
 } from "../../shared-ui/icons.slint";
 import {
     IconButton, DoodleStrokeData, TextButton,
@@ -28,9 +28,9 @@ export component DoodleOverlay inherits Rectangle {
     card := Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: min(980px, parent.width - 32px);
-        height: min(640px, parent.height - 32px);
-        border-radius: Theme.r-xl;
+        width: min(920px, parent.width - 32px);
+        height: min(660px, parent.height - 32px);
+        border-radius: Theme.r-md;
         background: Theme.surface;
         border-width: 1px;
         border-color: Theme.border-strong;
@@ -42,7 +42,7 @@ export component DoodleOverlay inherits Rectangle {
             spacing: 10px;
             HorizontalLayout {
                 height: 40px;
-                Text { text: "Doodle"; font-size: 17px; font-weight: 650; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                Text { text: "Doodle"; font-size: 16px; font-weight: 500; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
                 for color[i] in [#202124, #d93025, #1a73e8, #188038, #f9ab00, #9c27b0, #5dd8ff]:
                     TouchArea {
                         width: 26px;
@@ -76,8 +76,8 @@ export component DoodleOverlay inherits Rectangle {
                             background: root.pen-color;
                         }
                     }
-                IconButton { size: 32px; clicked => { root.undo(); } IconUndo2 { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; } }
-                IconButton { size: 32px; danger: true; clicked => { root.clear(); } IconTrash { stroke-color: Theme.danger; preferred-width: 17px; preferred-height: 17px; } }
+                IconButton { size: 44px; clicked => { root.undo(); } IconDoodleUndo { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
+                IconButton { size: 44px; clicked => { root.clear(); } IconTrash { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
             }
 
             paper := Rectangle {

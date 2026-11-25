@@ -105,7 +105,10 @@ pub struct NoteSummary {
 
 impl From<&Note> for NoteSummary {
     fn from(n: &Note) -> Self {
-        let preview = strip_markdown(&n.body).chars().take(160).collect();
+        // Web parity: card bodies are raw text with newlines preserved
+        // (app.js renders searchableBody un-stripped); the card line-clamp
+        // (prefs.clamp) handles visual clipping. Cap only absurd bodies.
+        let preview = truncate_preview(&n.body, 4096);
         Self {
             id: n.id,
             title: n.title.clone(),
@@ -123,19 +126,132 @@ impl From<&Note> for NoteSummary {
     }
 }
 
-/// Cheap markdown → plain text for previews.
+/// Cut a string to at most `max_chars` characters, backing off to the last
+/// word boundary so the result never ends mid-word; appends an ellipsis.
+fn truncate_preview(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        return s.to_string();
+    }
+    let cut = s.char_indices().nth(max_chars).map(|(i, _)| i).unwrap_or(s.len());
+    let head = &s[..cut];
+    match head.rfind(char::is_whitespace) {
+        Some(i) if i > 0 => format!("{}…", head[..i].trim_end()),
+        _ => format!("{}…", head.trim_end()),
+    }
+}
+
+/// Cheap markdown → plain text for previews. Strips inline formatting
+/// (** __ * _ ` ~~), links/images/wikilinks collapse to their visible text,
+/// checklist markers drop, HTML tags drop. Keeps the result single-line for
+/// the card line-clamp.
 pub fn strip_markdown(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for line in input.lines() {
         let t = line
             .trim_start_matches(['#', '>', '-', '*', '+', ' '])
             .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')');
+        // drop checklist markers: "- [ ] buy milk" -> "buy milk"
+        let t = t
+            .strip_prefix("[ ] ").or_else(|| t.strip_prefix("[x] ")).or_else(|| t.strip_prefix("[X] "))
+            .unwrap_or(t);
+        // ![[target]] / [[target]] / [[target|display]] -> display or target
+        let mut t = replace_wikilinks(t);
+        // ![alt](src) / [text](url) / [text][ref] -> alt or text
+        t = replace_md_links(&t);
+        // strip HTML tags
+        t = strip_html_tags(&t);
+        // inline markers: `code`, ** __ * _ ~~ — remove the delimiters, keep text
+        let t = t
+            .replace("**", "")
+            .replace("__", "")
+            .replace("``", "")
+            .replace('`', "")
+            .replace("~~", "");
+        // single * / _ emphasis leftovers (underscores inside words are kept by
+        // only removing paired markers — simple approach: drop lone * and
+        // `_` at word edges)
+        let t = t.replace('*', "");
         if !out.is_empty() {
             out.push(' ');
         }
-        out.push_str(t);
+        out.push_str(&t);
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn replace_wikilinks(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if s[i..].starts_with("[[") {
+            if let Some(end) = s[i + 2..].find("]]") {
+                let inner = &s[i + 2..i + 2 + end];
+                if let Some((_, display)) = inner.split_once('|') {
+                    out.push_str(display);
+                } else {
+                    out.push_str(inner);
+                }
+                i += 2 + end + 2;
+                continue;
+            }
+        }
+        out.push_str(&s[i..i + s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1)]);
+        i += s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+    }
+    out
+}
+
+fn replace_md_links(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(open) = rest.find('[') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        // image? trailing '!' belongs to the image syntax, not the text
+        let is_image = out.ends_with('!');
+        if is_image {
+            out.pop();
+        }
+        if let Some(close) = after.find(']') {
+            let label = &after[..close];
+            let after_close = &after[close + 1..];
+            if let Some(paren_end) = after_close.strip_prefix('(').and_then(|r| r.find(')')) {
+                // [label](url) / ![alt](src) — keep the visible text
+                out.push_str(label);
+                rest = &after_close[paren_end + 2..];
+                continue;
+            }
+            if after_close.starts_with('[') {
+                // [label][ref]
+                out.push_str(label);
+                if let Some(ref_end) = after_close.find(']') {
+                    rest = &after_close[ref_end + 1..];
+                    continue;
+                }
+            }
+            out.push('[');
+            rest = after;
+            continue;
+        }
+        out.push('[');
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+fn strip_html_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -252,5 +368,23 @@ impl Calendar {
             visible: true,
             sort_order: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_markdown;
+
+    #[test]
+    fn strips_inline_markdown() {
+        // the Welcome-note leak: Ctrl+N** must not survive into previews
+        assert_eq!(strip_markdown("- **Ctrl+N** — new note"), "Ctrl+N — new note");
+        assert_eq!(strip_markdown("__bold__ and `code`"), "bold and code");
+        assert_eq!(strip_markdown("see [Docs](https://example.com) now"), "see Docs now");
+        assert_eq!(strip_markdown("goto [[Welcome to Notes]]"), "goto Welcome to Notes");
+        assert_eq!(strip_markdown("goto [[a|Alias]]"), "goto Alias");
+        assert_eq!(strip_markdown("- [ ] buy milk"), "buy milk");
+        assert_eq!(strip_markdown("- [x] done task"), "done task");
+        assert_eq!(strip_markdown("![cat](cat.png) hello"), "cat hello");
     }
 }

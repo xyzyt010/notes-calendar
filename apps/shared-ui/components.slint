@@ -2,25 +2,11 @@
 
 import { Theme } from "theme.slint";
 import {
-    IconSearch, IconX, IconPin, IconGhost, IconChevronUp, IconChevronDown,
+    IconSearch, IconX, IconPin, IconPinFilled, IconGhost, IconArchive, IconArchiveArrowUp, IconTrash, IconUndo2,
+    IconPalette, IconMoreVert, IconDownload, IconClock, IconHistory, IconRestore, IconCheck, IconNoteFile,
 } from "icons.slint";
 
 // ---------- Data ----------
-export struct NoteData {
-    id: string,
-    title: string,
-    preview: string,
-    date-label: string,
-    pinned: bool,
-    favorite: bool,
-    word-count: int,
-    color-index: int,
-    image-count: int,
-    card-height: length,
-    render-md: bool,
-    preview-styled: styled-text,
-}
-
 export struct ChecklistItemData {
     line: int,
     text: string,
@@ -34,6 +20,24 @@ export struct NoteImageData {
     thumbnail: image,
 }
 
+export struct NoteData {
+    id: string,
+    title: string,
+    preview: string,
+    date-label: string,
+    pinned: bool,
+    favorite: bool,
+    word-count: int,
+    color-index: int,
+    image-count: int,
+    card-height: length,
+    render-md: bool,
+    preview-styled: styled-text,
+    checklist-items: [ChecklistItemData],
+    is-checklist: bool,
+    images: [NoteImageData],
+}
+
 export struct GraphNodeData {
     id: string,
     title: string,
@@ -42,12 +46,14 @@ export struct GraphNodeData {
     radius: length,
     linked: int,
     active: bool,
+    depth: float,
 }
 
 export struct GraphLinkData {
     id: string,
     commands: string,
     active: bool,
+    depth: float,
 }
 
 export struct DoodleStrokeData {
@@ -77,10 +83,10 @@ export component IconButton inherits Rectangle {
 
     width: size;
     height: size;
-    border-radius: size / 2;
+    border-radius: size / 4;
     background: root.selected
-        ? Theme.accent-soft
-        : (ta.has-hover ? (root.danger ? Theme.danger-soft : Theme.surface-2) : transparent);
+        ? Theme.icon-hover-bg
+        : (ta.has-hover ? (root.danger ? Theme.danger-soft : Theme.icon-hover-bg) : transparent);
     animate background { duration: 130ms; easing: ease-out; }
 
     ta := TouchArea {
@@ -95,6 +101,37 @@ export component IconButton inherits Rectangle {
             @children
         }
     }
+}
+
+// ---------- NoteCheckBox: web <input type=checkbox> geometry ----------
+// Browser checkbox: 20px square (18px in settings, 15px on cards), centred
+// Material check on --text-sec fill when on; std-widgets CheckBox misaligns.
+export component NoteCheckBox inherits Rectangle {
+    in property <bool> checked: false;
+    in property <length> box-size: 20px;
+    callback toggled();
+
+    width: root.box-size;
+    height: root.box-size;
+    border-radius: 2px;
+    background: root.checked ? Theme.text-dim : transparent;
+    border-width: root.checked ? 0px : 2px;
+    border-color: Theme.text-dim;
+    animate background { duration: 120ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+
+    if root.checked:
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                IconCheck { stroke-color: #ffffff; preferred-width: root.box-size * 0.74; preferred-height: root.box-size * 0.74; }
+            }
+        }
 }
 
 // ---------- RailButton: left icon rail entry (icon + tiny label) ----------
@@ -143,21 +180,50 @@ export component RailButton inherits Rectangle {
     }
 }
 
+// ---------- RailRow: compact rail item (44px icon box, web .drawer-item collapsed) ----------
+export component RailRow inherits Rectangle {
+    in property <bool> selected: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: root.selected
+        ? Theme.drawer-active
+        : (ta.has-hover ? (root.danger ? Theme.danger-soft : Theme.icon-hover-bg) : transparent);
+    animate background { duration: 150ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            @children
+        }
+    }
+}
+
 // ---------- SidebarRow: folder/tag list rows ----------
 export component SidebarRow inherits Rectangle {
     in property <string> label;
     in property <string> meta: "";          // right-aligned count
     in property <bool> show-delete: false;
+    in property <bool> labels: true;        // rail expanded: show text; collapsed: icon only
     in-out property <bool> selected: false;
     callback clicked();
     callback delete();
 
-    height: 40px;
-    border-radius: Theme.r-md;
+    height: root.labels ? 52px : 44px;
+    border-radius: root.labels ? 11px : 10px;
     background: root.selected
-        ? Theme.accent-soft
-        : (ta.has-hover ? Theme.surface-2 : transparent);
-    animate background { duration: 120ms; easing: ease-out; }
+        ? Theme.drawer-active
+        : (ta.has-hover ? Theme.icon-hover-bg : transparent);
+    animate background { duration: 150ms; easing: ease-out; }
 
     ta := TouchArea {
         mouse-cursor: pointer;
@@ -165,10 +231,10 @@ export component SidebarRow inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 12px;
-        spacing: 10px;
-        alignment: start;
+        padding-left: root.labels ? 14px : 10px;
+        padding-right: root.labels ? 26px : 10px;
+        spacing: root.labels ? 18px : 0px;
+        alignment: root.labels ? start : center;
 
         VerticalLayout {
             alignment: center;
@@ -176,10 +242,11 @@ export component SidebarRow inherits Rectangle {
         }
 
         Text {
+            visible: root.labels;
             text: root.label;
-            font-size: 13.5px;
-            font-weight: root.selected ? 600 : 400;
-            color: root.selected ? Theme.accent : Theme.text;
+            font-size: 14px;
+            font-weight: root.selected ? 500 : 400;
+            color: root.selected ? Theme.text : Theme.text-dim;
             vertical-alignment: center;
             wrap: no-wrap;
             overflow: elide;
@@ -188,14 +255,14 @@ export component SidebarRow inherits Rectangle {
         Rectangle {} // spring
 
         Text {
-            visible: root.meta != "" && !(root.show-delete && ta.has-hover);
+            visible: root.labels && root.meta != "" && !(root.show-delete && ta.has-hover);
             text: root.meta;
-            font-size: 11.5px;
+            font-size: 12px;
             color: Theme.text-faint;
             vertical-alignment: center;
         }
 
-        if root.show-delete && ta.has-hover:
+        if root.labels && root.show-delete && ta.has-hover:
             IconButton {
                 size: 24px;
                 clicked => { root.delete(); }
@@ -218,38 +285,38 @@ export component SearchBar inherits Rectangle {
 
     changed focus-token => { input.focus(); }
 
-    height: 44px;
-    border-radius: Theme.r-xl;
-    background: Theme.surface-2;
-    border-width: 1.5px;
-    border-color: input.has-focus ? Theme.accent : transparent;
-    animate border-color { duration: 150ms; easing: ease-out; }
+    height: 52px;
+    border-radius: 14px;
+    background: input.has-focus ? (Theme.dark ? Theme.surface-3 : #FFFFFF) : Theme.surface-2;
+    border-width: 0px;
+    animate background { duration: 150ms; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: 15px;
-        padding-right: 6px;
-        spacing: 8px;
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
 
         Rectangle {
-            width: 22px;
+            width: 28px;
             VerticalLayout {
                 alignment: center;
                 HorizontalLayout {
                     alignment: center;
-                    IconSearch { stroke-color: Theme.text-dim; preferred-width: 17px; preferred-height: 17px; }
+                    IconSearch { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; }
                 }
             }
         }
 
         input := TextInput {
             horizontal-stretch: 1;
-            font-size: 14.5px;
+            font-size: 16px;
             font-weight: 400;
             color: Theme.text;
             vertical-alignment: center;
             selection-background-color: Theme.accent-soft;
             selection-foreground-color: Theme.text;
             single-line: true;
+            edited => { root.submitted(); }
             key-pressed(event) => {
                 if event.text == "\n" {
                     root.submitted();
@@ -260,7 +327,7 @@ export component SearchBar inherits Rectangle {
         }
 
         Rectangle {
-            width: 34px;
+            width: 36px;
             VerticalLayout {
                 alignment: center;
                 HorizontalLayout {
@@ -269,7 +336,7 @@ export component SearchBar inherits Rectangle {
                         visible: root.text != "";
                         size: 32px;
                         clicked => { root.text = ""; root.cleared(); }
-                        IconX { stroke-color: Theme.text-dim; preferred-width: 16px; preferred-height: 16px; }
+                        IconX { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
                     }
                 }
             }
@@ -284,8 +351,8 @@ export component SearchBar inherits Rectangle {
         height: 100%;
         vertical-alignment: center;
         text: root.placeholder;
-        font-size: 14.5px;
-        color: Theme.text-faint;
+        font-size: 16px;
+        color: Theme.placeholder;
         wrap: no-wrap;
         overflow: elide;
     }
@@ -329,114 +396,568 @@ export component Input inherits Rectangle {
     }
 }
 
+// ---------- CardActions: shared hover action row for NoteCard ----------
+// Web .card-actions order/count: pin · color · archive · trash · more
+// (archive view: unarchive · color · export · trash · more;
+// trash view: restore · delete-forever · more). Guards live on
+// actions-visible (card hover | popover open), applied by the caller.
+export component CardActions inherits HorizontalLayout {
+    in property <int> active-view: 0;
+    in property <bool> pinned: false;
+    in-out property <bool> actions-visible: true;
+    in-out property <bool> color-open: false;
+    in-out property <bool> more-open: false;
+    callback pin-toggled();
+    callback archive-toggled();
+    callback trash-toggled();
+    callback restore-toggled();
+    callback delete-forever();
+    callback export-toggled();
+
+    spacing: 4px;
+    opacity: root.actions-visible ? 1.0 : 0.0;
+    animate opacity { duration: 120ms; easing: ease-out; }
+            if root.active-view == 4:
+                HorizontalLayout {
+                    spacing: 4px;
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.restore-toggled(); } }
+                        IconRestore { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        danger: true;
+                        clicked => { if root.actions-visible { root.delete-forever(); } }
+                        IconTrash { stroke-color: Theme.danger; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                }
+            if root.active-view == 3:
+                HorizontalLayout {
+                    spacing: 4px;
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.archive-toggled(); } }
+                        IconArchiveArrowUp { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.more-open = false; root.color-open = !root.color-open; } }
+                        IconPalette { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.export-toggled(); } }
+                        IconDownload { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.trash-toggled(); } }
+                        IconTrash { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                }
+            if root.active-view != 3 && root.active-view != 4:
+                HorizontalLayout {
+                    spacing: 4px;
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.more-open = false; root.color-open = !root.color-open; } }
+                        IconPalette { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.archive-toggled(); } }
+                        IconArchive { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.actions-visible { root.trash-toggled(); } }
+                        IconTrash { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                }
+            IconButton {
+                size: 32px;
+                clicked => { if root.actions-visible { root.color-open = false; root.more-open = !root.more-open; } }
+                IconMoreVert { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+            }
+}
+
 // ---------- NoteCard ----------
 export component NoteCard inherits Rectangle {
     in property <NoteData> note;
     in property <bool> compact: false;
     in property <int> preview-lines: 5;
     in property <bool> show-date: true;
+    in property <int> active-view: 0;   // 0 all · 1 pinned · 2 fav · 3 archive · 4 trash
     in-out property <bool> selected: false;
-    in property <bool> manual-reorder: false;
+    in property <bool> fixed-height: false;   // Keep style: exact 170px like the webapp
+    in property <bool> drag-enabled: false;
+    in property <bool> drag-active: false;    // this card is the one being dragged (render as placeholder)
     callback clicked();
+    callback double-clicked();
     callback pin-toggled();
-    callback favorite-toggled();
-    callback move-up();
-    callback move-down();
+    callback archive-toggled();
+    callback trash-toggled();
+    callback restore-toggled();
+    callback delete-forever();
+    callback export-toggled();
+    callback card-color-picked(int);
+    callback card-timestamps();
+    callback checklist-item-toggled(int);
+    callback drag-begin(string, length, length, length, length);  // id, pointer abs x/y, card abs x/y
+    callback drag-move(length, length);
+    callback drag-finish(length, length);
 
-    height: root.compact ? 132px : root.note.card-height;
-    border-radius: Theme.r-lg;
-    background: Theme.neo ? Theme.neo-card : Theme.note-color(root.note.color-index);
-    border-width: Theme.neo ? 0px : 1px;
-    border-color: root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border);
+    private property <bool> pressed: false;
+    private property <bool> suppress-click: false;
+    private property <bool> color-open: false;
+    private property <bool> more-open: false;
+    private property <length> start-mouse-x: 0px;
+    private property <length> start-mouse-y: 0px;
+    private property <bool> dragging: false;
+
+    height: root.compact ? 68px : (root.fixed-height ? 170px : root.note.card-height);
+    border-radius: root.compact ? 8px : Theme.r-md;
+    // Web parity: uncoloured notes have no fill (they read as the page);
+    // coloured notes carry their fill and no border. The drag ghost adds
+    // a fill back for the floating copy (see note-grid).
+    background: Theme.neo ? Theme.neo-card : (root.compact && ta.has-hover && root.note.color-index == 0 ? Theme.surface-2 : (root.note.color-index == 0 ? transparent : Theme.note-color(root.note.color-index)));
+    border-width: (Theme.neo || root.compact) ? 0px : ((root.drag-active || root.selected) ? 1px : (root.note.color-index == 0 ? 1px : 0px));
+    border-color: root.drag-active ? Theme.accent : (root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border));
     animate background { duration: 130ms; }
     animate border-color { duration: 130ms; }
-    drop-shadow-blur: Theme.neo ? 26px : 18px;
-    drop-shadow-offset-y: Theme.neo ? 8px : 3px;
-    drop-shadow-color: Theme.neo ? #00000090 : #00000038;
+    drop-shadow-blur: root.drag-active ? 0px : (ta.has-hover ? 24px : (Theme.neo ? 26px : 12px));
+    drop-shadow-offset-y: root.drag-active ? 0px : (ta.has-hover ? 4px : (Theme.neo ? 8px : 2px));
+    drop-shadow-color: Theme.neo ? #00000090 : #00000040;
+    animate drop-shadow-blur { duration: 160ms; easing: ease-out; }
+    animate drop-shadow-offset-y { duration: 160ms; easing: ease-out; }
+    opacity: root.drag-active ? 0.0 : 1.0;
 
     ta := TouchArea {
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
+        clicked => {
+            if root.suppress-click { root.suppress-click = false; return; }
+            root.color-open = false; root.more-open = false; root.clicked();
+        }
+        double-clicked => { root.double-clicked(); }
+        pointer-event(event) => {
+            if !root.drag-enabled { return EventResult.reject; }
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.pressed = true;
+                root.dragging = false;
+                root.suppress-click = false;
+                root.start-mouse-x = self.mouse-x;
+                root.start-mouse-y = self.mouse-y;
+                return EventResult.accept;
+            }
+            if event.kind == PointerEventKind.move {
+                if root.pressed {
+                    if !root.dragging {
+                        if abs(self.mouse-x - root.start-mouse-x) > 7px || abs(self.mouse-y - root.start-mouse-y) > 7px {
+                            root.dragging = true;
+                            root.suppress-click = true;
+                            root.drag-begin(root.note.id,
+                                self.absolute-position.x + self.mouse-x,
+                                self.absolute-position.y + self.mouse-y,
+                                self.absolute-position.x,
+                                self.absolute-position.y);
+                        }
+                    } else {
+                        root.drag-move(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    }
+                }
+                return EventResult.accept;
+            }
+            if event.kind == PointerEventKind.up {
+                if root.pressed && root.dragging {
+                    root.drag-finish(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                }
+                root.pressed = false;
+                root.dragging = false;
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
 
     VerticalLayout {
-        padding-left: 16px;
-        padding-right: 16px;
-        padding-top: 14px;
-        padding-bottom: 12px;
-        spacing: 8px;
+        visible: !root.compact;
+        y: (!root.compact && root.note.images.length > 0) ? 146px : 0px;
+        width: 100%;
+        height: (!root.compact && root.note.images.length > 0) ? root.height - 146px : root.height;
+        padding-left: root.compact ? 12px : 18px;
+        padding-right: root.compact ? 12px : 18px;
+        padding-top: root.compact ? 8px : 14px;
+        padding-bottom: root.compact ? 6px : 10px;
+        spacing: root.compact ? 4px : 6px;
 
-        // Title row with pin
+        // Title row: pin control sits top-right (web pinSvg). Pinned = solid
+        // 15px badge always visible; unpinned = outline button on hover.
         HorizontalLayout {
+            height: root.compact ? 24px : 32px;
             spacing: 8px;
             Text {
+                horizontal-stretch: 1;
                 text: root.note.title == "" ? "Untitled" : root.note.title;
-                font-size: 15px;
-                font-weight: 600;
-                color: root.note.title == "" ? Theme.text-faint : Theme.text;
+                font-size: 16.5px;
+                font-weight: 500;
+                color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
                 font-italic: root.note.title == "";
                 wrap: no-wrap;
                 overflow: elide;
                 vertical-alignment: center;
             }
+            if root.compact && root.note.pinned:
+                VerticalLayout {
+                    alignment: center;
+                    IconPinFilled { stroke-color: Theme.icon; preferred-width: 15px; preferred-height: 15px; }
+                }
+            if !root.compact:
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    opacity: (root.note.pinned || ta.has-hover || root.color-open || root.more-open) ? 1.0 : 0.0;
+                    animate opacity { duration: 120ms; easing: ease-out; }
+                    IconButton {
+                        size: 32px;
+                        clicked => { if root.note.pinned || ta.has-hover || root.color-open || root.more-open { root.pin-toggled(); } }
+                        if root.note.pinned:
+                            IconPinFilled { stroke-color: Theme.text; preferred-width: 17px; preferred-height: 17px; }
+                        if !root.note.pinned:
+                            IconPin { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                    }
+                }
         }
 
         if root.note.render-md:
             StyledText {
                 text: root.note.preview-styled;
-                default-font-size: 13px;
-                default-color: Theme.text-dim;
+                default-font-size: 12px;
+                default-color: Theme.card-body-ink;
                 link-color: Theme.accent;
                 max-lines: root.preview-lines <= 0 ? 0 : root.preview-lines;
             }
-        if !root.note.render-md:
+        if root.note.is-checklist && !root.note.render-md:
+            VerticalLayout {
+                spacing: 5px;
+                for item[i] in root.note.checklist-items:
+                    HorizontalLayout {
+                            visible: !root.compact || i == 0;
+                            spacing: 6px;
+                            VerticalLayout {
+                                padding-top: 2px;
+                                NoteCheckBox { box-size: 15px; checked: item.checked; toggled => { root.checklist-item-toggled(item.line); } }
+                            }
+                            Text {
+                                text: item.text;
+                                font-size: 12px;
+                                font-weight: 400;
+                                line-height-factor: 1.5;
+                                color: item.checked ? Theme.text-faint : Theme.card-body-ink;
+                                wrap: word-wrap;
+                                overflow: elide;
+                                vertical-alignment: top;
+                                horizontal-stretch: 1;
+                            }
+                        }
+            }
+        if !root.note.is-checklist && !root.note.render-md:
             Text {
+                width: 100%;
+                height: root.compact ? 18px : root.height - 88px;
                 text: root.note.preview;
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 400;
-                color: Theme.text-dim;
-                wrap: word-wrap;
+                line-height-factor: 1.5;
+                color: Theme.card-body-ink;
+                wrap: root.compact ? no-wrap : word-wrap;
                 overflow: elide;
-                max-height: root.height - 88px;
                 vertical-alignment: top;
             }
 
         Rectangle {} // spring
 
+        // date / count row (web .note-date sits above .card-actions)
+        if !root.compact && (root.show-date || root.note.image-count > 0):
+            HorizontalLayout {
+                spacing: 8px;
+
+                if root.show-date:
+                    Text {
+                        text: root.note.date-label;
+                        font-size: 11.5px;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+
+                if root.note.image-count > 0:
+                    Text {
+                        text: root.note.image-count + " image" + (root.note.image-count == 1 ? "" : "s");
+                        font-size: 11.5px;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+            }
+
+        if root.compact:
+            HorizontalLayout {
+                spacing: 8px;
+                if root.show-date:
+                    Text {
+                        text: root.note.date-label;
+                        font-size: 11.5px;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                if root.note.image-count > 0:
+                    Text {
+                        text: root.note.image-count + " image" + (root.note.image-count == 1 ? "" : "s");
+                        font-size: 11.5px;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                Rectangle {}
+                CardActions {
+                    active-view: root.active-view;
+                    pinned: root.note.pinned;
+                    actions-visible: ta.has-hover || root.color-open || root.more-open;
+                    color-open <=> root.color-open;
+                    more-open <=> root.more-open;
+                    pin-toggled => { root.pin-toggled(); }
+                    archive-toggled => { root.archive-toggled(); }
+                    trash-toggled => { root.trash-toggled(); }
+                    restore-toggled => { root.restore-toggled(); }
+                    delete-forever => { root.delete-forever(); }
+                    export-toggled => { root.export-toggled(); }
+                }
+            }
+
+        if !root.compact:
+            CardActions {
+                active-view: root.active-view;
+                pinned: root.note.pinned;
+                actions-visible: ta.has-hover || root.color-open || root.more-open;
+                color-open <=> root.color-open;
+                more-open <=> root.more-open;
+                pin-toggled => { root.pin-toggled(); }
+                archive-toggled => { root.archive-toggled(); }
+                trash-toggled => { root.trash-toggled(); }
+                restore-toggled => { root.restore-toggled(); }
+                delete-forever => { root.delete-forever(); }
+                export-toggled => { root.export-toggled(); }
+            }
+    }
+
+
+
+    // Row mode (web .note-row): glyph + title/snippet + side date/actions,
+    // borderless with a bottom hairline, hover = --bar-bg.
+    if root.compact:
         HorizontalLayout {
-            spacing: 8px;
-
-            if root.show-date:
+            width: 100%;
+            height: 100%;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 12px;
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        alignment: center;
+                        if root.note.pinned:
+                            IconPinFilled { stroke-color: Theme.text; preferred-width: 18px; preferred-height: 18px; }
+                        if !root.note.pinned:
+                            IconNoteFile { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
+                    }
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
                 Text {
-                    text: root.note.date-label;
-                    font-size: 11px;
-                    color: Theme.text-faint;
+                    text: root.note.title == "" ? "Untitled" : root.note.title;
+                    font-size: 15px;
+                    font-weight: 500;
+                    color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
+                    font-italic: root.note.title == "";
+                    wrap: no-wrap;
+                    overflow: elide;
                     vertical-alignment: center;
                 }
-
-            if root.note.image-count > 0:
                 Text {
-                    text: root.note.image-count + " image" + (root.note.image-count == 1 ? "" : "s");
-                    font-size: 11px;
-                    color: Theme.text-faint;
+                    text: root.note.preview;
+                    font-size: 12.5px;
+                    color: Theme.text-dim;
+                    wrap: no-wrap;
+                    overflow: elide;
+                    height: 18px;
                     vertical-alignment: center;
                 }
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+                if root.show-date:
+                    Text {
+                        text: root.note.date-label;
+                        font-size: 12px;
+                        color: Theme.text-dim;
+                        horizontal-alignment: right;
+                    }
+                CardActions {
+                    active-view: root.active-view;
+                    pinned: root.note.pinned;
+                    actions-visible: ta.has-hover || root.color-open || root.more-open;
+                    color-open <=> root.color-open;
+                    more-open <=> root.more-open;
+                    pin-toggled => { root.pin-toggled(); }
+                    archive-toggled => { root.archive-toggled(); }
+                    trash-toggled => { root.trash-toggled(); }
+                    restore-toggled => { root.restore-toggled(); }
+                    delete-forever => { root.delete-forever(); }
+                    export-toggled => { root.export-toggled(); }
+                }
+            }
+        }
+    if root.compact:
+        Rectangle { x: 0px; y: root.height - 1px; width: 100%; height: 1px; background: Theme.divider; }
 
-            Rectangle {} // spring
+    // image strip (web .note-card .note-imgs: bleeds to card edge, cover)
+    if !root.compact && root.note.images.length > 0:
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 140px;
+            clip: true;
+            border-radius: Theme.r-md;
+            background: Theme.surface-2;
+            Image {
+                source: root.note.images[0].thumbnail;
+                width: 100%;
+                height: 100%;
+                image-fit: cover;
+            }
+            if root.note.images.length > 1:
+                Rectangle {
+                    x: parent.width - 92px;
+                    y: parent.height - 30px;
+                    width: 84px;
+                    height: 22px;
+                    border-radius: 5px;
+                    background: #00000090;
+                    Text { text: "+" + (root.note.image-count - 1) + " more"; font-size: 11px; color: #FFFFFF; horizontal-alignment: center; vertical-alignment: center; }
+                }
+        }
 
-            if root.manual-reorder:
-                IconButton { size: 24px; clicked => { root.move-up(); } IconChevronUp { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
-                IconButton { size: 24px; clicked => { root.move-down(); } IconChevronDown { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
+    // ===== colour popover (web #color-pop: 6x2 dots) =====
+    if root.color-open:
+        Rectangle {
+            x: -6px;
+            y: max(4px, root.height - 106px);
+            width: 278px;
+            height: 106px;
+            background: Theme.surface;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 28px;
+            drop-shadow-offset-y: 4px;
+            drop-shadow-color: #00000060;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 12px;
+                    for idx[i] in [0, 1, 2, 3, 4, 5]:
+                        TouchArea {
+                            width: 31px;
+                            height: 31px;
+                            mouse-cursor: pointer;
+                            clicked => { root.color-open = false; root.card-color-picked(idx); }
+                            Rectangle {
+                                width: 31px;
+                                height: 31px;
+                                border-radius: 8px;
+                                background: idx == 0 ? Theme.card-bg : Theme.note-color(idx);
+                                border-width: 1px;
+                                border-color: Theme.border;
+                            }
+                        }
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    for idx[i] in [6, 7, 8, 9, 10, 11]:
+                        TouchArea {
+                            width: 31px;
+                            height: 31px;
+                            mouse-cursor: pointer;
+                            clicked => { root.color-open = false; root.card-color-picked(idx); }
+                            Rectangle {
+                                width: 31px;
+                                height: 31px;
+                                border-radius: 8px;
+                                background: Theme.note-color(idx);
+                                border-width: 1px;
+                                border-color: Theme.border;
+                            }
+                        }
+                }
+            }
+        }
 
-            // Pin button — visible on hover or when pinned
-            IconButton {
-                visible: ta.has-hover || root.note.pinned;
-                size: 30px;
-                clicked => { root.pin-toggled(); }
-                IconPin {
-                    stroke-color: root.note.pinned ? Theme.accent : Theme.text-dim;
-                    preferred-width: 16px;
-                    preferred-height: 16px;
+    // ===== more popover (web #more-pop) =====
+    if root.more-open:
+        Rectangle {
+            x: -6px;
+            y: max(4px, root.height - 108px);
+            width: 200px;
+            height: 96px;
+            background: Theme.surface;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 28px;
+            drop-shadow-offset-y: 4px;
+            drop-shadow-color: #00000060;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+                Rectangle {
+                    height: 36px;
+                    border-radius: 9px;
+                    background: tam.has-hover ? Theme.icon-hover-bg : transparent;
+                    tam := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.more-open = false; root.archive-toggled(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        spacing: 10px;
+                        if root.active-view == 3:
+                            IconArchiveArrowUp { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
+                        if root.active-view != 3:
+                            IconArchive { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
+                        Text { text: root.active-view == 3 ? "Unarchive" : "Archive"; font-size: 13px; color: Theme.text; }
+                    }
+                }
+                Rectangle {
+                    height: 36px;
+                    border-radius: 9px;
+                    background: tts.has-hover ? Theme.icon-hover-bg : transparent;
+                    tts := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.more-open = false; root.card-timestamps(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        spacing: 10px;
+                        IconHistory { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
+                        Text { text: "Timestamps"; font-size: 13px; color: Theme.text; }
+                    }
                 }
             }
         }
@@ -448,31 +969,34 @@ export component TextButton inherits Rectangle {
     in property <string> label;
     in-out property <bool> emphasis: false;
     in-out property <bool> danger: false;
+    in property <bool> text-only: false; // web .btn-text: transparent bg, text-sec ink, 500 14px
     callback clicked();
 
-    height: 38px;
-    min-width: 76px;
+    height: root.text-only ? 40px : 38px;
+    min-width: root.text-only ? 0px : 76px;
     horizontal-stretch: 0;
-    border-radius: Theme.r-md;
-    background: root.danger
-        ? (ta.has-hover ? Theme.danger-soft : Theme.danger-soft)
-        : (root.emphasis
-            ? (ta.has-hover ? Theme.accent : Theme.accent)
-            : (ta.has-hover ? Theme.surface-3 : Theme.surface-2));
+    border-radius: root.text-only ? 9px : Theme.r-md;
+    background: root.text-only
+        ? (ta.has-hover ? Theme.icon-hover-bg : transparent)
+        : root.danger
+            ? (ta.has-hover ? Theme.danger-soft : Theme.danger-soft)
+            : (root.emphasis
+                ? (ta.has-hover ? Theme.accent : Theme.accent)
+                : (ta.has-hover ? Theme.surface-3 : Theme.surface-2));
     border-width: 0px;
-    animate background { duration: 120ms; }
+    animate background { duration: 150ms; easing: ease-out; }
 
     ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
 
     VerticalLayout {
         alignment: center;
-        padding-left: 16px;
-        padding-right: 16px;
+        padding-left: root.text-only ? 17px : 16px;
+        padding-right: root.text-only ? 17px : 16px;
         Text {
             text: root.label;
-            font-size: 13.5px;
-            font-weight: 600;
-            color: root.danger ? Theme.danger : (root.emphasis ? Theme.on-accent : Theme.text);
+            font-size: root.text-only ? 14px : 13.5px;
+            font-weight: root.text-only ? 500 : 600;
+            color: root.danger ? Theme.danger : (root.text-only ? (ta.has-hover ? Theme.text : Theme.text-dim) : (root.emphasis ? Theme.on-accent : Theme.text));
             horizontal-alignment: center;
         }
     }
@@ -540,22 +1064,20 @@ export component ConfirmDialog inherits Rectangle {
 export component Toast inherits Rectangle {
     in property <string> message;
 
-    height: 42px;
-    border-radius: Theme.r-xl;
-    background: #2a2b2d;
-    border-width: 1px;
-    border-color: #ffffff1f;
+    height: 48px;
+    border-radius: 12px;
+    background: #323639;
     drop-shadow-blur: 16px;
     drop-shadow-color: #00000050;
 
     VerticalLayout {
         alignment: center;
-        padding-left: 18px;
-        padding-right: 18px;
+        padding-left: 26px;
+        padding-right: 26px;
         Text {
             text: root.message;
-            font-size: 13px;
-            color: #f1f3f4;
+            font-size: 14px;
+            color: #E8EAED;
         }
     }
 }

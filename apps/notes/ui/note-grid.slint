@@ -1,189 +1,393 @@
-// Note board: Keep masonry / Notion page rows / Neomorph cards.
-// Column assignment is computed in Rust so cards can have variable heights.
+// Note board: Keep cards with balanced masonry layout (order-preserving optimal
+// partition computed in Rust). Drag & drop: pointer lifts a ghost card,
+// drop-target slot highlighted, model reorders once on drop.
 
 import { Theme } from "../../shared-ui/theme.slint";
 import {
-    NoteCard, EmptyState, TextButton, NoteData,
+    NoteCard, EmptyState, TextButton, NoteData, ChecklistItemData, NoteImageData,
 } from "../../shared-ui/components.slint";
-
-component MasonryColumn inherits VerticalLayout {
-    in property <[NoteData]> notes: [];
-    in property <string> selected-id: "";
-    in property <int> preview-lines: 5;
-    in property <bool> show-dates: true;
-    in property <bool> column-visible: true;
-    callback card-clicked(string);
-    callback pin-toggled(string);
-
-    spacing: 12px;
-    visible: root.column-visible;
-
-    for note[i] in root.notes:
-        NoteCard {
-            note: note;
-            selected: note.id == root.selected-id;
-            preview-lines: root.preview-lines;
-            show-date: root.show-dates;
-            clicked => { root.card-clicked(note.id); }
-            pin-toggled => { root.pin-toggled(note.id); }
-        }
-}
+import { NewNoteComposer } from "composer.slint";
 
 export component NoteListPanel inherits Rectangle {
     in property <[NoteData]> pinned-notes: [];
     in property <[NoteData]> notes: [];
-    in property <[NoteData]> pinned-col-0: [];
-    in property <[NoteData]> pinned-col-1: [];
-    in property <[NoteData]> pinned-col-2: [];
-    in property <[NoteData]> pinned-col-3: [];
-    in property <[NoteData]> pinned-col-4: [];
-    in property <[NoteData]> notes-col-0: [];
-    in property <[NoteData]> notes-col-1: [];
-    in property <[NoteData]> notes-col-2: [];
-    in property <[NoteData]> notes-col-3: [];
-    in property <[NoteData]> notes-col-4: [];
     in property <bool> list-view: false;
-    in property <int> layout-style: 0; // 0 Keep · 1 Notion · 2 Obsidian · 3 Neomorph
-    in property <int> density: 1;      // 0 compact · 1 cozy · 2 roomy
+    in property <int> layout-style: 0;
+    in property <int> density: 1;
     in property <int> preview-lines: 5;
     in property <bool> show-dates: true;
     in property <string> selected-id: "";
-    in property <string> view-title: "All notes";
+    in property <string> view-title: "ALL NOTES";
     in property <int> active-view: 0;
     in property <string> search-text: "";
     in property <int> columns: 4;
-    in property <bool> pinned-section: false;
+    in property <int> board-cols: 1;
+    in property <[length]> board-lefts: [];
+    in property <[length]> board-tops: [];
+    in property <length> pin-item-w: 240px;
+    in property <length> notes-item-w: 240px;
+    in property <length> pin-block-h: 0px;
+    in property <length> canvas-height: 800px;
     in property <int> note-count: 0;
-    in property <bool> manual-order: false;
+    in property <bool> pinned-section: false;
+
+    in-out property <bool> dragging: false;
+    in-out property <string> drag-id: "";
+    in-out property <NoteData> drag-card;
+    in-out property <length> drag-abs-x: 0px;
+    in-out property <length> drag-abs-y: 0px;
+    in-out property <length> grab-dx: 0px;
+    in-out property <length> grab-dy: 0px;
+    in-out property <int> drag-target: -1;
+    in-out property <length> drag-target-x: 0px;
+    in-out property <length> drag-target-y: 0px;
+    in-out property <length> drag-target-h: 170px;
 
     callback card-clicked(string);
+    callback card-double-clicked(string);
     callback pin-toggled(string);
+    callback archive-toggled(string);
+    callback trash-toggled(string);
+    callback restore-toggled(string);
+    callback delete-forever(string);
+    callback card-color-picked(string, int);
+    callback card-checklist-toggle(string, int);
+    callback card-export(string);
+    callback card-timestamps(string);
     callback ask-empty-trash();
-    callback manual-note-moved(string, int);
+    callback drag-reorder(string, int);
+    callback drag-finish();
+    callback board-metrics(length);
+    callback drag-move-rust(length, length);
+
+    // Composer state (rendered inside the scroll area so it scrolls away
+    // with the board, exactly like web .new-note-shell in page flow).
+    in-out property <bool> composer-open: false;
+    in-out property <string> composer-title: "";
+    in-out property <string> composer-body: "";
+    in-out property <bool> composer-pinned: false;
+    in-out property <int> composer-color-index: 0;
+    in-out property <bool> composer-checklist-mode: false;
+    in-out property <bool> composer-preview-mode: false;
+    in-out property <[ChecklistItemData]> composer-checklist-items: [];
+    in property <styled-text> composer-preview-styled;
+    in-out property <[NoteImageData]> composer-pending-images: [];
+    in-out property <bool> composer-color-popover-open: false;
+    callback composer-open-requested();
+    callback composer-close-requested();
+    callback composer-content-changed();
+    callback composer-toggle-pin();
+    callback composer-color-picked(int);
+    callback composer-image-requested();
+    callback composer-draw-requested();
+    callback composer-checklist-toggle();
+    callback composer-preview-toggle();
+    callback composer-checklist-add(string);
+    callback composer-checklist-toggle-item(int);
+    callback composer-checklist-edit-item(int, string);
+    callback composer-checklist-remove-item(int);
+    callback composer-remove-pending-image(string);
+
+    private property <length> composer-space: composerWrap.preferred-height + 40px;
 
     background: Theme.bg;
-    preferred-height: 1px;
+    clip: true;
+
+    init => { root.board-metrics(self.width); }
+    changed width => { root.board-metrics(self.width); }
+
+    private property <length> panel-abs-x: root.absolute-position.x;
+    private property <length> panel-abs-y: root.absolute-position.y;
+    private property <int> cols: root.board-cols < 1 ? 1 : root.board-cols;
+    private property <length> item-w: (root.width - 20px - (cols - 1) * 22px) / cols;
+    private property <length> pin-w: root.pin-item-w > 0px ? root.pin-item-w : root.item-w;
+    private property <length> notes-w: root.notes-item-w > 0px ? root.notes-item-w : root.item-w;
+    private property <int> pin-count: root.pinned-notes.length;
+    private property <length> row-w: min(900px, root.width);
+    private property <length> row-x: root.layout-style == 1 ? (root.width - root.row-w) / 2 : 0px;
+    private property <int> tot: root.pinned-notes.length + root.notes.length;
 
     VerticalLayout {
-        HorizontalLayout {
-            height: 34px;
-            padding-top: 2px;
-            padding-left: 4px;
-            padding-right: 2px;
-            Text {
-                text: root.view-title;
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 1px;
-                color: Theme.text-faint;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
-            if root.active-view == 4 && root.note-count > 0:
-                TextButton {
-                    label: "Empty trash";
-                    danger: true;
-                    clicked => { root.ask-empty-trash(); }
+        if root.view-title != "" || (root.active-view == 4 && root.note-count > 0):
+            HorizontalLayout {
+                height: 34px;
+                padding-top: 2px;
+                padding-left: 6px;
+                padding-right: 4px;
+                Text {
+                    text: root.view-title;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-dim;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
-        }
+                if root.active-view == 4 && root.note-count > 0:
+                    TextButton {
+                        label: "Empty trash";
+                        danger: true;
+                        clicked => { root.ask-empty-trash(); }
+                    }
+            }
 
         scroll := Flickable {
             vertical-stretch: 1;
+            mouse-drag-pan-enabled: false;
             content-width: self.width;
-            content-height: contentLayout.preferred-height;
+            content-height: root.canvas-height + root.composer-space;
 
-            contentLayout := VerticalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                padding-top: 6px;
-                padding-bottom: 24px;
-                spacing: 10px;
+            canvas := Rectangle {
+                x: 0;
+                y: 0;
+                width: 100%;
+                height: root.canvas-height + root.composer-space;
+                clip: true;
 
-                // ===== Notion / compact rows =====
-                if root.list-view || root.layout-style == 1:
-                    VerticalLayout {
-                        spacing: 8px;
-                        for note[i] in root.notes:
-                            NoteCard {
-                                note: note;
-                                compact: true;
-                                preview-lines: root.preview-lines;
-                                show-date: root.show-dates;
-                                selected: note.id == root.selected-id;
-                                manual-reorder: root.manual-order;
-                                clicked => { root.card-clicked(note.id); }
-                                pin-toggled => { root.pin-toggled(note.id); }
-                                move-up => { root.manual-note-moved(note.id, -1); }
-                                move-down => { root.manual-note-moved(note.id, 1); }
-                            }
+                // composer (web .new-note-shell: padding 12px 0 28px, centred 600px)
+                composerWrap := HorizontalLayout {
+                    x: 0;
+                    y: 12px;
+                    width: 100%;
+                    height: self.preferred-height;
+                    alignment: center;
+                    NewNoteComposer {
+                        width: min(600px, parent.width - 30px);
+                        open <=> root.composer-open;
+                        title <=> root.composer-title;
+                        body <=> root.composer-body;
+                        pinned <=> root.composer-pinned;
+                        color-index <=> root.composer-color-index;
+                        checklist-mode <=> root.composer-checklist-mode;
+                        preview-mode <=> root.composer-preview-mode;
+                        checklist-items <=> root.composer-checklist-items;
+                        preview-styled: root.composer-preview-styled;
+                        pending-images <=> root.composer-pending-images;
+                        color-popover-open <=> root.composer-color-popover-open;
+                        open-requested => { root.composer-open-requested(); }
+                        close-requested => { root.composer-close-requested(); }
+                        content-changed => { root.composer-content-changed(); }
+                        toggle-pin => { root.composer-toggle-pin(); }
+                        color-picked(idx) => { root.composer-color-picked(idx); }
+                        image-requested => { root.composer-image-requested(); }
+                        draw-requested => { root.composer-draw-requested(); }
+                        checklist-toggle => { root.composer-checklist-toggle(); }
+                        preview-toggle => { root.composer-preview-toggle(); }
+                        checklist-add(text) => { root.composer-checklist-add(text); }
+                        checklist-toggle-item(line) => { root.composer-checklist-toggle-item(line); }
+                        checklist-edit-item(line, text) => { root.composer-checklist-edit-item(line, text); }
+                        checklist-remove-item(line) => { root.composer-checklist-remove-item(line); }
+                        remove-pending-image(id) => { root.composer-remove-pending-image(id); }
+                    }
+                }
+
+                // section labels (Keep style: 14px / 500, text-dim)
+                if root.pinned-section && root.pinned-notes.length > 0:
+                    Text {
+                        x: 8px + root.row-x;
+                        y: root.composer-space + 10px;
+                        height: 20px;
+                        text: "Pinned";
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                if root.pinned-section && root.pinned-notes.length > 0 && root.notes.length > 0:
+                    Text {
+                        x: 8px + root.row-x;
+                        y: root.composer-space + root.pin-block-h + 10px;
+                        height: 20px;
+                        text: "Others";
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
                     }
 
-                // ===== Masonry (Keep / Neomorph) =====
-                if !root.list-view && root.layout-style != 1:
-                    VerticalLayout {
-                        spacing: 12px;
+                // drop-target indicator
+                if root.dragging && root.drag-target >= 0:
+                    Rectangle {
+                        x: root.drag-target-x;
+                        y: root.composer-space + root.drag-target-y;
+                        width: root.drag-target < root.pin-count ? root.pin-w : root.notes-w;
+                        height: min(root.drag-target-h, root.canvas-height + root.composer-space - root.drag-target-y);
+                        border-radius: Theme.r-md;
+                        border-width: 1px;
+                        border-color: Theme.accent;
+                        background: Theme.accent-soft;
+                        opacity: 0.25;
+                    }
 
-                        if root.pinned-section && root.pinned-notes.length > 0:
-                            HorizontalLayout {
-                                padding-left: 2px;
-                                Text {
-                                    text: "PINNED";
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    letter-spacing: 1.2px;
-                                    color: Theme.text-faint;
-                                }
+                for note[i] in root.pinned-notes:
+                    NoteCard {
+                        note: note;
+                        x: root.layout-style == 1 ? root.row-x : root.board-lefts[i];
+                        width: root.layout-style == 1 ? root.row-w : root.pin-w;
+                        y: root.composer-space + root.board-tops[i];
+                        animate x { duration: 190ms; easing: ease-out; }
+                        animate y { duration: 190ms; easing: ease-out; }
+                        compact: root.list-view || root.layout-style == 1;
+                        preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;
+                        show-date: root.show-dates;
+                        active-view: root.active-view;
+                        selected: note.id == root.selected-id;
+                        drag-enabled: true;
+                        drag-active: root.dragging && root.drag-id == note.id;
+                        clicked => { root.card-clicked(note.id); }
+                        double-clicked => { root.card-double-clicked(note.id); }
+                        pin-toggled => { root.pin-toggled(note.id); }
+                        archive-toggled => { root.archive-toggled(note.id); }
+                        trash-toggled => { root.trash-toggled(note.id); }
+                        restore-toggled => { root.restore-toggled(note.id); }
+                        delete-forever => { root.delete-forever(note.id); }
+                        card-color-picked(idx) => { root.card-color-picked(note.id, idx); }
+                        checklist-item-toggled(line) => { root.card-checklist-toggle(note.id, line); }
+                        export-toggled => { root.card-export(note.id); }
+                        card-timestamps => { root.card-timestamps(note.id); }
+                        drag-begin(id, ax, ay, cx, cy) => {
+                            root.dragging = true;
+                            root.drag-id = id;
+                            root.drag-card = note;
+                            root.drag-abs-x = ax;
+                            root.drag-abs-y = ay;
+                            root.grab-dx = ax - cx;
+                            root.grab-dy = ay - cy;
+                        }
+                        drag-move(x, y) => {
+                            root.drag-abs-x = x;
+                            root.drag-abs-y = y;
+                            if root.dragging && root.tot > 1 {
+                                let rel-y = y - root.panel-abs-y - 34px - scroll.content-y - root.composer-space;
+                                let rel-x = x - root.panel-abs-x;
+                                root.drag-move-rust(rel-x, rel-y);
                             }
-                        if root.pinned-section && root.pinned-notes.length > 0:
-                            HorizontalLayout {
-                                spacing: 12px;
-                                MasonryColumn { notes: root.pinned-col-0; column-visible: root.columns >= 1; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                                MasonryColumn { notes: root.pinned-col-1; column-visible: root.columns >= 2; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                                MasonryColumn { notes: root.pinned-col-2; column-visible: root.columns >= 3; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                                MasonryColumn { notes: root.pinned-col-3; column-visible: root.columns >= 4; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                                MasonryColumn { notes: root.pinned-col-4; column-visible: root.columns >= 5; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                        }
+                        drag-finish(x, y) => {
+                            if root.drag-target >= 0 {
+                                root.drag-reorder(root.drag-id, root.drag-target);
                             }
-                        if root.pinned-section && root.notes.length > 0:
-                            HorizontalLayout {
-                                padding-left: 2px;
-                                padding-top: 2px;
-                                Text {
-                                    text: "OTHERS";
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    letter-spacing: 1.2px;
-                                    color: Theme.text-faint;
-                                }
+                            root.dragging = false;
+                            root.drag-id = "";
+                            root.drag-finish();
+                        }
+                    }
+
+                for note[i] in root.notes:
+                    NoteCard {
+                        note: note;
+                        x: root.layout-style == 1 ? root.row-x : root.board-lefts[root.pin-count + i];
+                        width: root.layout-style == 1 ? root.row-w : root.notes-w;
+                        y: root.composer-space + root.board-tops[root.pin-count + i];
+                        animate x { duration: 190ms; easing: ease-out; }
+                        animate y { duration: 190ms; easing: ease-out; }
+                        compact: root.list-view || root.layout-style == 1;
+                        preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;
+                        show-date: root.show-dates;
+                        active-view: root.active-view;
+                        selected: note.id == root.selected-id;
+                        drag-enabled: true;
+                        drag-active: root.dragging && root.drag-id == note.id;
+                        clicked => { root.card-clicked(note.id); }
+                        double-clicked => { root.card-double-clicked(note.id); }
+                        pin-toggled => { root.pin-toggled(note.id); }
+                        archive-toggled => { root.archive-toggled(note.id); }
+                        trash-toggled => { root.trash-toggled(note.id); }
+                        restore-toggled => { root.restore-toggled(note.id); }
+                        delete-forever => { root.delete-forever(note.id); }
+                        card-color-picked(idx) => { root.card-color-picked(note.id, idx); }
+                        checklist-item-toggled(line) => { root.card-checklist-toggle(note.id, line); }
+                        export-toggled => { root.card-export(note.id); }
+                        card-timestamps => { root.card-timestamps(note.id); }
+                        drag-begin(id, ax, ay, cx, cy) => {
+                            root.dragging = true;
+                            root.drag-id = id;
+                            root.drag-card = note;
+                            root.drag-abs-x = ax;
+                            root.drag-abs-y = ay;
+                            root.grab-dx = ax - cx;
+                            root.grab-dy = ay - cy;
+                        }
+                        drag-move(x, y) => {
+                            root.drag-abs-x = x;
+                            root.drag-abs-y = y;
+                            if root.dragging && root.tot > 1 {
+                                let rel-y = y - root.panel-abs-y - 34px - scroll.content-y - root.composer-space;
+                                let rel-x = x - root.panel-abs-x;
+                                root.drag-move-rust(rel-x, rel-y);
                             }
-                        HorizontalLayout {
-                            spacing: 12px;
-                            MasonryColumn { notes: root.notes-col-0; column-visible: root.columns >= 1; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                            MasonryColumn { notes: root.notes-col-1; column-visible: root.columns >= 2; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                            MasonryColumn { notes: root.notes-col-2; column-visible: root.columns >= 3; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                            MasonryColumn { notes: root.notes-col-3; column-visible: root.columns >= 4; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
-                            MasonryColumn { notes: root.notes-col-4; column-visible: root.columns >= 5; horizontal-stretch: 1; selected-id: root.selected-id; preview-lines: root.preview-lines; show-dates: root.show-dates; card-clicked(id) => { root.card-clicked(id); } pin-toggled(id) => { root.pin-toggled(id); } }
+                        }
+                        drag-finish(x, y) => {
+                            if root.drag-target >= 0 {
+                                root.drag-reorder(root.drag-id, root.drag-target);
+                            }
+                            root.dragging = false;
+                            root.drag-id = "";
+                            root.drag-finish();
                         }
                     }
 
                 if root.note-count == 0:
-                    Rectangle {
+                    EmptyState {
+                        x: 0;
+                        y: root.composer-space + 40px;
+                        width: 100%;
                         height: 320px;
-                        EmptyState {
-                            width: 100%;
-                            height: 100%;
-                            title: root.search-text != "" ? "No matches found"
-                                : root.active-view == 1 ? "No pinned notes"
-                                : root.active-view == 2 ? "No favorites yet"
-                                : root.active-view == 3 ? "Nothing archived"
-                                : root.active-view == 4 ? "Trash is empty"
-                                : "Notes you add appear here";
-                            subtitle: root.search-text != "" ? "Try a different search, or create a new note."
-                                : root.active-view == 1 ? "Pin a note to find it quickly."
-                                : root.active-view == 4 ? "Deleted notes stay here until you empty the trash."
-                                : "Press Ctrl+N or tap + to create your first note.";
-                        }
+                        title: root.search-text != "" ? "No matching notes"
+                            : root.active-view == 1 ? "Nothing pinned"
+                            : root.active-view == 2 ? "No favorites yet"
+                            : root.active-view == 3 ? "Nothing archived"
+                            : root.active-view == 4 ? "Trash is empty"
+                            : "Notes you add appear here";
+                        subtitle: root.search-text != "" ? "Try a different search, or create a new note."
+                            : root.active-view == 1 ? "Pin a note from its card to keep it at the top of your board."
+                            : root.active-view == 3 ? "Archive a note from its ⋮ menu to get it out of your board without deleting it."
+                            : root.active-view == 4 ? "Deleted notes stay here until you empty the trash."
+                            : "";
                     }
             }
         }
+
     }
+
+    // ===== floating drag ghost (follows the pointer) =====
+    if root.dragging && root.drag-card.id != "":
+        Rectangle {
+            x: root.drag-abs-x - root.panel-abs-x - root.grab-dx;
+            y: root.drag-abs-y - root.panel-abs-y - root.grab-dy;
+            width: (root.drag-card.pinned ? root.pin-w : root.notes-w) > 0px ? (root.drag-card.pinned ? root.pin-w : root.notes-w) : 240px;
+            height: root.drag-card.card-height;
+            border-radius: Theme.r-md;
+            // Ghost needs a fill even for uncoloured notes (web parity).
+            background: Theme.neo ? Theme.neo-card : (root.drag-card.color-index == 0 ? Theme.card-bg : Theme.note-color(root.drag-card.color-index));
+            border-width: 1px;
+            border-color: Theme.border;
+            opacity: 1.0;
+            drop-shadow-blur: 44px;
+            drop-shadow-offset-y: 20px;
+            drop-shadow-color: #000000ad;
+            clip: true;
+            VerticalLayout {
+                padding-left: 18px;
+                padding-right: 18px;
+                padding-top: 14px;
+                padding-bottom: 10px;
+                spacing: 6px;
+                Text {
+                    text: root.drag-card.title == "" ? "Untitled" : root.drag-card.title;
+                    font-size: 16.5px;
+                    font-weight: 500;
+                    color: root.drag-card.title == "" ? Theme.text-faint : Theme.card-title-ink;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.drag-card.preview;
+                    font-size: 12px;
+                    color: Theme.card-body-ink;
+                    line-height-factor: 1.5;
+                    wrap: word-wrap;
+                    overflow: elide;
+                }
+            }
+        }
 }

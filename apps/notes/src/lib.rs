@@ -64,7 +64,7 @@ impl Default for Prefs {
             sort: NotesSort::Updated,
             pinned_first: true,
             md_cards: false,
-            show_dates: true,
+            show_dates: false,
             clamp: 5,
         }
     }
@@ -112,6 +112,8 @@ struct AppState {
     dark: bool,
     seeded: bool,
     current_id: Option<Uuid>,
+    /// Which note the editor currently holds — flush_note only writes back when these match.
+    editor_note_id: Option<Uuid>,
     view: i32,
     search: String,
     active_folder: Option<Uuid>,
@@ -135,6 +137,26 @@ struct AppState {
     doodle_strokes: Vec<DoodleInternalStroke>,
     pending_note_images: Vec<NoteImage>,
     current_images: Vec<NoteImageMeta>,
+    // Board layout (Rust-computed balanced masonry) — lefts/tops per flattened card
+    board_layout: std::cell::RefCell<BoardLayoutInfo>,
+    board_width: Option<f32>,
+}
+
+#[derive(Default, Clone)]
+struct BoardLayoutInfo {
+    lefts: Vec<f32>,
+    tops: Vec<f32>,
+    heights: Vec<f32>,
+    col_of: Vec<usize>,
+    cols: usize,
+    pin_count: usize,
+    item_w: f32,
+    pin_item_w: f32,
+    oth_item_w: f32,
+    pin_cols: usize,
+    oth_cols: usize,
+    pin_block_h: f32,
+    gap: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -199,17 +221,266 @@ fn word_count(text: &str) -> i32 {
     text.split_whitespace().count() as i32
 }
 
-fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32) -> f32 {
-    let preview_chars = preview.chars().count();
-    let title_lines = if title.chars().count() > 34 { 2 } else { 1 };
-    let raw_lines = preview_chars.div_ceil(42);
-    let mut body_lines = raw_lines.max(1);
+/// Keep's shortest-column packing (matches the webapp's layoutMasonry()):
+/// each note in order goes to the currently-shortest column. Columns stay
+/// balanced and visual parity with the deployed site is exact.
+fn shortest_column_assign(heights: &[f32], cols: usize) -> Vec<usize> {
+    let n = heights.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let k = cols.max(1).min(n);
+    let mut col_h = vec![0.0f32; k];
+    heights
+        .iter()
+        .map(|&h| {
+            let mut best = 0;
+            for (i, &ch) in col_h.iter().enumerate() {
+                if ch < col_h[best] {
+                    best = i;
+                }
+            }
+            col_h[best] += h;
+            best
+        })
+        .collect()
+}
+
+/// Column ladder identical to the webapp's masonryColCount():
+/// COL_TARGET { compact:160, cozy:186, roomy:240 }, small {142,166,198},
+/// desktop clamp 2..7, phone clamp (2 if mobileTwo else 1)..4.
+fn web_masonry_cols(board_w: f32, density: &str, mobile_two: bool, compact: bool) -> usize {
+    let (target, small, gap) = match density {
+        "compact" => (160.0f32, 142.0f32, 14.0f32),
+        "roomy" => (240.0f32, 198.0f32, 26.0f32),
+        _ => (186.0f32, 166.0f32, 22.0f32),
+    };
+    if compact {
+        let mobile_gap = 12.0f32;
+        let by_width = ((board_w + mobile_gap) / (small + mobile_gap)).floor() as i32;
+        by_width.clamp(if mobile_two { 2 } else { 1 }, 4).max(1) as usize
+    } else {
+        let by_width = ((board_w + gap) / (target + gap)).floor() as i32;
+        by_width.clamp(2, 7) as usize
+    }
+}
+
+fn web_masonry_gap(density: &str, compact: bool) -> f32 {
+    if compact {
+        return 12.0;
+    }
+    match density {
+        "compact" => 14.0,
+        "roomy" => 26.0,
+        _ => 22.0,
+    }
+}
+
+/// Compute board card positions (absolute canvas coords) for the flattened
+/// `pinned ++ others` list. Each section packs independently like the webapp's
+/// `layoutMasonry()`: `ncol = min(masonryColCount(), cards.length)` and
+/// `colW = (sectionWidth - gap*(ncol-1)) / ncol`, so a 2-card pinned section
+/// stretches to two wide columns instead of sharing the others' narrow width.
+/// `cols` is the global masonryColCount(); per-section widths are derived here.
+/// Returns (lefts, tops, col_of, total_height, cols, pin_block_h, pin_cols, oth_cols, pin_w, oth_w).
+#[allow(clippy::type_complexity)]
+fn compute_board_layout(
+    pin_heights: &[f32],
+    others_heights: &[f32],
+    cols: usize,
+    item_w: f32,
+    gap: f32,
+    sectioned: bool,
+) -> (
+    Vec<f32>,
+    Vec<f32>,
+    Vec<usize>,
+    f32,
+    usize,
+    f32,
+    usize,
+    usize,
+    f32,
+    f32,
+) {
+    let pin_n = pin_heights.len();
+    let oth_n = others_heights.len();
+    let n = pin_n + oth_n;
+    if n == 0 {
+        return (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            0.0,
+            cols,
+            0.0,
+            cols,
+            cols,
+            item_w,
+            item_w,
+        );
+    }
+    // Per-section column counts: web layoutMasonry() clamps to the section's own
+    // card count, so few-card sections use wide columns.
+    let gcols = cols.max(1);
+    let pin_ncol = if pin_n == 0 { gcols } else { gcols.min(pin_n) };
+    let oth_ncol = if oth_n == 0 { gcols } else { gcols.min(oth_n) };
+    // Widths: caller passes `item_w` derived from `gcols`; derive per-section
+    // widths from the same board width. Board width = item_w*gcols + gap*(gcols-1) + 20.
+    let board_w = item_w * gcols as f32 + gap * (gcols as f32 - 1.0).max(0.0) + 20.0;
+    let pin_w = if pin_n == 0 {
+        item_w
+    } else {
+        (board_w - 20.0 - (pin_ncol as f32 - 1.0).max(0.0) * gap) / pin_ncol as f32
+    };
+    let oth_w = if oth_n == 0 {
+        item_w
+    } else {
+        (board_w - 20.0 - (oth_ncol as f32 - 1.0).max(0.0) * gap) / oth_ncol as f32
+    };
+    let pin_x_of = |c: usize| 10.0 + c as f32 * (pin_w + gap);
+    let oth_x_of = |c: usize| 10.0 + c as f32 * (oth_w + gap);
+
+    let mut lefts = vec![0.0; n];
+    let mut tops = vec![0.0; n];
+    let mut col_of = vec![0usize; n];
+
+    let pin_header = if sectioned && pin_n > 0 { 40.0 } else { 0.0 };
+    // shortest-column packing, per section (matches the webapp's two grids)
+    let pin_cols = if pin_n == 0 { Vec::new() } else { shortest_column_assign(pin_heights, pin_ncol) };
+    let mut col_bottoms = vec![8.0f32 + pin_header; pin_ncol.max(1)];
+    for i in 0..pin_n {
+        let c = pin_cols[i];
+        lefts[i] = pin_x_of(c);
+        tops[i] = col_bottoms[c];
+        col_of[i] = c;
+        col_bottoms[c] += pin_heights[i] + gap;
+    }
+    // end of the pinned block (including its header); used to place the OTHERS label
+    let pin_block_h = col_bottoms.iter().cloned().fold(8.0f32 + pin_header, f32::max);
+
+    let oth_header = if sectioned && oth_n > 0 { 40.0 } else { 0.0 };
+    // shortest-column packing for the others block
+    let oth_cols = if oth_n == 0 { Vec::new() } else { shortest_column_assign(others_heights, oth_ncol) };
+    let others_base = if pin_n > 0 { pin_block_h + 8.0 } else { 8.0 } + oth_header;
+    let mut col_tops = vec![others_base; oth_ncol.max(1)];
+    for i in 0..oth_n {
+        let c = oth_cols[i];
+        let fi = pin_n + i;
+        lefts[fi] = oth_x_of(c);
+        tops[fi] = col_tops[c];
+        col_of[fi] = c;
+        col_tops[c] += others_heights[i] + gap;
+    }
+    let oth_block_h = col_tops.iter().cloned().fold(others_base as f32, f32::max);
+    let total = if oth_n > 0 { oth_block_h } else { pin_block_h } + if pin_n > 0 { 8.0 } else { 0.0 };
+    (
+        lefts,
+        tops,
+        col_of,
+        total + 8.0,
+        gcols,
+        pin_block_h,
+        pin_ncol,
+        oth_ncol,
+        pin_w,
+        oth_w,
+    )
+}
+
+// Compute the insertion slot for an armed drag from (rel_x, rel_y) in canvas
+// coordinates, and push the highlight geometry into the UI. The target is a
+// flat display index (pinned first, then others), matching move_note_to_index.
+fn board_drag_target(state: &Rc<RefCell<AppState>>, ui: &MainWindow, rel_x: f32, rel_y: f32) {
+    let layout = state.borrow().board_layout.borrow().clone();
+    let n = layout.lefts.len();
+    let debug = std::env::var_os("YELLOD_NOTES_DEBUG").is_some();
+    if debug {
+        eprintln!(
+            "[board] drag rel=({:.1},{:.1}) n={} pin_ct={} cols={} item_w={:.1} pin_block_h={:.1} gap={:.1}",
+            rel_x, rel_y, n, layout.pin_count, layout.cols, layout.item_w, layout.pin_block_h, layout.gap
+        );
+    }
+    if n == 0 {
+        ui.set_drag_target(-1);
+        return;
+    }
+    let gap = layout.gap;
+    let in_pinned = layout.pin_count > 0 && rel_y < layout.pin_block_h;
+    // Per-section geometry (web layoutMasonry() packs each grid on its own cols).
+    let (colw, ncol) = if in_pinned {
+        (layout.pin_item_w + gap, layout.pin_cols.max(1))
+    } else {
+        (layout.oth_item_w + gap, layout.oth_cols.max(1))
+    };
+    let col = (((rel_x - 10.0) / colw).floor() as i32).clamp(0, ncol.saturating_sub(1) as i32) as usize;
+    let offset = if in_pinned { 0 } else { layout.pin_count };
+    let end = if in_pinned { layout.pin_count } else { n };
+    let col_indices: Vec<usize> = (offset..end).filter(|&i| layout.col_of[i] == col).collect();
+    let col_start = col_indices.first().copied().unwrap_or(end);
+    let mut count = 0usize;
+    for &i in &col_indices {
+        let center = layout.tops[i] + layout.heights[i] * 0.5;
+        if center <= rel_y {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    let target = (col_start + count).min(end);
+    let hl_idx = target.min(n - 1);
+    if debug {
+        eprintln!("[board]   col={} col_start={} count={} target={}", col, col_start, count, target);
+    }
+    ui.set_drag_target(target as i32);
+    let hl_y = if target < n {
+        layout.tops[target]
+    } else {
+        layout.tops[hl_idx] + layout.heights[hl_idx] + gap
+    };
+    ui.set_drag_target_x(layout.lefts[hl_idx]);
+    ui.set_drag_target_y(hl_y);
+    ui.set_drag_target_h(layout.heights[hl_idx]);
+}
+
+fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32, card_w: f32) -> f32 {
+    let title_cpl = ((card_w - 36.0) / 8.6).floor().max(16.0);
+    let title_chars = title.chars().count();
+    let title_lines = if title_chars == 0 {
+        0
+    } else {
+        ((title_chars as f32) / title_cpl).ceil() as usize
+    }
+    .clamp(0, 2);
+    // Count explicit lines plus soft-wrapped continuation lines from the real card width.
+    let cpl = ((card_w - 36.0) / 7.0).floor().max(18.0);
+    let mut body_lines: usize = 0;
+    for line in preview.lines() {
+        let chars = line.chars().count().max(1);
+        body_lines += (chars as f32 / cpl).ceil() as usize;
+    }
+    let mut body_lines = body_lines.max(1);
     if clamp_lines > 0 {
         body_lines = body_lines.clamp(2, clamp_lines as usize);
-    } else {
-        body_lines = body_lines.clamp(2, 16);
     }
-    (64.0 + (title_lines as f32 * 24.0) + (body_lines as f32 * 20.0)).clamp(150.0, 460.0)
+    // clamp_lines == 0 is "fit content" (web default): height grows with the
+    // body, capped only by the absolute card ceiling below.
+    if body_lines < 2 {
+        body_lines = 2;
+    }
+    // Web content height: pad 24 + title margin 4 + body margin 10 + actions 32 = 70
+    // plus title lines (23.1) and body lines (18). Verified: Meeting 147, Sprint 219.
+    (70.0 + title_lines as f32 * 23.0 + body_lines as f32 * 18.0).clamp(120.0, 1000.0)
+}
+
+fn editor_body_height_px(body: &str, width_px: f32) -> f32 {
+    let cpl = ((width_px - 40.0) / 7.3).floor().max(24.0);
+    let mut lines = 0usize;
+    for line in body.lines() {
+        lines += ((line.chars().count().max(1) as f32) / cpl).ceil() as usize;
+    }
+    let lines = lines.max(1);
+    (10.0 + lines as f32 * 23.2).clamp(90.0, 460.0)
 }
 
 fn styled_markdown(text: &str) -> slint::StyledText {
@@ -360,37 +631,168 @@ fn draw_disc(img: &mut image::RgbaImage, cx: i32, cy: i32, radius: i32, color: [
     }
 }
 
-fn move_note_in_order(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid, delta: i32) {
+// ---------- drag & drop reorder ----------
+
+
+// Reorder the visible list to an absolute position. Mirrors the exact flattened
+// order refresh_list renders (pinned first, then others), so drag & drop targets
+// map 1:1 to what the user sees.
+fn move_note_to_index(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid, target: usize) {
     let s = state.borrow();
+    let unfiltered = s.search.trim().is_empty()
+        && s.active_folder.is_none()
+        && s.active_tag.is_none()
+        && (s.view == 0 || s.view == 1);
+
+    let key = s.vault_key.clone();
     let filter = s.list_filter();
-    let summaries = notes_store::list_notes_with_key(&s.db, &filter, s.vault_key.as_ref()).unwrap_or_default();
-    let mut ids: Vec<Uuid> = summaries.iter().map(|n| n.id).collect();
-    let Some(pos) = ids.iter().position(|n| *n == id) else { return };
-    let target = pos as i32 + delta;
-    if target < 0 || target >= ids.len() as i32 { return; }
-    let current_pinned = summaries[pos].pinned;
-    if summaries[target as usize].pinned != current_pinned { return; }
-    ids.swap(pos, target as usize);
-    let _ = notes_store::set_note_order(&s.db, &ids);
+    let summaries = notes_store::list_notes_with_key(&s.db, &filter, key.as_ref()).unwrap_or_default();
+    let prefs = s.prefs.clone();
+
+    let mut pinned_e: Vec<usize> = Vec::new();
+    let mut others_e: Vec<usize> = Vec::new();
+    if s.view == 1 {
+        others_e = summaries.iter().enumerate().filter(|(_, n)| n.pinned).map(|(i, _)| i).collect();
+    } else if unfiltered && s.view == 0 {
+        for (i, n) in summaries.iter().enumerate() {
+            if n.pinned && prefs.pinned_first {
+                pinned_e.push(i);
+            } else {
+                others_e.push(i);
+            }
+        }
+    } else {
+        others_e = (0..summaries.len()).collect();
+    }
+    let mut order = pinned_e;
+    order.extend(others_e);
+
+    let Some(pos) = order.iter().position(|&i| summaries[i].id == id) else { return };
+    let target = target.min(order.len().saturating_sub(1));
+    if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+        eprintln!("[board] move_note_to_index id={} pos={} target={} sort_is_manual={}", id, pos, target, matches!(prefs.sort, NotesSort::Manual));
+    }
+    if pos == target {
+        return;
+    }
+    let item = order.remove(pos);
+    order.insert(target, item);
+    let ids: Vec<Uuid> = order.into_iter().map(|i| summaries[i].id).collect();
+
+    // Switch to manual ordering so the arrangement sticks
+    let need_manual = !matches!(prefs.sort, NotesSort::Manual);
+    let order_write = notes_store::set_note_order(&s.db, &ids);
     drop(s);
+    if need_manual {
+        let mut sm = state.borrow_mut();
+        if !matches!(sm.prefs.sort, NotesSort::Manual) {
+            sm.prefs.sort = NotesSort::Manual;
+            ui.set_sort_setting(3);
+            save_config(&sm);
+        }
+    }
+    let _ = order_write;
     refresh_list(state, ui);
     refresh_graph(state, ui);
 }
 
-fn note_to_data(s: &NoteSummary, prefs: &Prefs) -> NoteData {
+/// Web parseChecklistBody: a note is a checklist only when every non-empty
+/// line is a task line. Returns items capped so the card stays within the
+/// 1000px height ceiling (same budget estimate_card_height_px clamps to).
+fn checklist_preview_items(preview: &str, title: &str, card_w: f32) -> Vec<ChecklistItemData> {
+    let items = parse_checklist_items(preview);
+    let non_empty = preview.lines().filter(|l| !l.trim().is_empty()).count();
+    if items.is_empty() || items.len() != non_empty {
+        return Vec::new();
+    }
+    let cpl = ((card_w - 36.0) / 7.0).floor().max(18.0);
+    let title_lines = if title.is_empty() { 0.0 } else { ((title.chars().count() as f32) / ((card_w - 36.0) / 8.6).floor().max(16.0)).ceil().min(2.0) };
+    let mut budget = 1000.0 - 70.0 - title_lines * 23.0;
+    let mut out = Vec::new();
+    for item in items {
+        let lines = ((item.text.chars().count().max(1) as f32) / cpl).ceil().max(1.0);
+        let cost = lines * 18.0 + 5.0;
+        if budget - cost < 0.0 && !out.is_empty() { break; }
+        budget -= cost;
+        out.push(item);
+    }
+    out
+}
+
+fn card_thumbnails(db: &rusqlite::Connection, note_id: Uuid, key: Option<&ycore::crypto::VaultKey>) -> Vec<NoteImageData> {
+    let mut metas = notes_store::list_images(db, note_id, key).unwrap_or_default();
+    metas.sort_by_key(|m| m.created_at);
+    metas.iter().take(2).map(|meta| NoteImageData {
+        id: meta.id.to_string().into(),
+        name: meta.name.clone().into(),
+        size_label: format_bytes(meta.size).into(),
+        thumbnail: notes_store::get_image(db, meta.id, key).ok().flatten()
+            .and_then(|img| decode_image_bytes(&img.bytes, Some(480))).unwrap_or_default(),
+    }).collect()
+}
+
+/// Web plainLinesToItems + serialize: turning checklist mode ON rewrites
+/// every non-empty line as a task (bullets stripped, [x]/[ ] state kept);
+/// turning it OFF writes the item texts back as plain lines.
+fn to_task_lines(body: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for line in body.lines() {
+        let t = line.trim();
+        if t.is_empty() { continue; }
+        let mut checked: Option<bool> = None;
+        let mut rest = t;
+        for (pat, val) in [("- [x]", true), ("- [X]", true), ("* [x]", true), ("* [X]", true), ("+ [x]", true), ("+ [X]", true),
+                           ("- [ ]", false), ("* [ ]", false), ("+ [ ]", false)] {
+            if let Some(r) = t.strip_prefix(pat) { checked = Some(val); rest = r; break; }
+        }
+        let text = match checked {
+            Some(_) => rest.trim().to_string(),
+            None => {
+                let stripped = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")).or_else(|| t.strip_prefix("+ ")).or_else(|| t.strip_prefix("\u{2022} ")).unwrap_or(t);
+                stripped.trim().to_string()
+            }
+        };
+        if !text.is_empty() {
+            out.push(format!("- [{}] {}", if checked.unwrap_or(false) { "x" } else { " " }, text));
+        }
+    }
+    out.join("\n")
+}
+
+fn from_task_lines(body: &str) -> String {
+    let items = parse_checklist_items(body);
+    if items.is_empty() { return body.to_string(); }
+    items.iter().map(|i| i.text.to_string()).collect::<Vec<_>>().join("\n")
+}
+
+/// Web parseChecklistBody strictness: every non-empty line is a task.
+fn is_strict_checklist(body: &str) -> bool {
+    let items = parse_checklist_items(body);
+    let non_empty = body.lines().filter(|l| !l.trim().is_empty()).count();
+    !items.is_empty() && items.len() == non_empty
+}
+
+fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>) -> NoteData {
     let title = s.title.as_str();
     let preview = s.preview.as_str();
+    let plain_preview = ycore::model::strip_markdown(preview);
+    let checklist_items = checklist_preview_items(preview, title, card_w);
+    let is_checklist = !checklist_items.is_empty();
+    let checklist_extra = if is_checklist { (checklist_items.len().saturating_sub(1) as f32) * 5.0 } else { 0.0 };
     NoteData {
+        images: ModelRc::new(VecModel::from(images)),
+        checklist_items: ModelRc::new(VecModel::from(checklist_items)),
+        is_checklist,
         id: s.id.to_string().into(),
         title: title.into(),
-        preview: preview.into(),
+        preview: plain_preview.clone().into(),
         date_label: rel_time(s.updated_at).into(),
         pinned: s.pinned,
         favorite: s.favorite,
         word_count: 0,
         color_index: color_index(&s.color),
         image_count: s.image_count as i32,
-        card_height: estimate_card_height_px(title, preview, prefs.clamp),
+        card_height: (estimate_card_height_px(title, &plain_preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
         preview_styled: styled_markdown(preview),
     }
@@ -469,11 +871,18 @@ fn graph_dimensions(ui: &MainWindow) -> (f32, f32) {
     let scale = ui.window().scale_factor().max(0.5);
     let w = physical.width as f32 / scale;
     let h = physical.height as f32 / scale;
-    let sidebar = if ui.get_sidebar_open() { sidebar_width() } else { 0.0 };
-    ((w - 72.0 - sidebar).max(320.0), (h - 64.0 - 26.0).max(240.0))
+    let sidebar = if ui.get_compact() {
+        0.0
+    } else if ui.get_sidebar_open() || ui.get_rail_hover() {
+        sidebar_width()
+    } else {
+        rail_width()
+    };
+    ((w - 72.0 - sidebar).max(320.0), (h - 64.0).max(240.0))
 }
 
-fn sidebar_width() -> f32 { 264.0 }
+fn sidebar_width() -> f32 { 280.0 }
+fn rail_width() -> f32 { 64.0 }
 
 fn hash_uuid(id: Uuid) -> u64 {
     let bytes = id.as_bytes();
@@ -562,38 +971,57 @@ fn refresh_graph(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     }
 
     let s = state.borrow();
-    let mut screen: Vec<(Uuid, f32, f32, f32)> = Vec::with_capacity(notes.len());
-    let mut ui_nodes: Vec<GraphNodeData> = Vec::with_capacity(notes.len());
+    let mut screen: Vec<(Uuid, f32, f32, f32, f32)> = Vec::with_capacity(notes.len());
     for note in &notes {
         let Some(pos) = s.graph_positions.get(&note.id) else { continue };
         let (x, y, perspective) = graph_project(pos, yaw, pitch, zoom, width, height);
         let deg = *degree.get(&note.id).unwrap_or(&0);
         let radius = (9.0 + deg as f32 * 2.4).clamp(10.0, 19.0) * perspective.clamp(0.72, 1.25);
-        screen.push((note.id, x, y, radius));
+        screen.push((note.id, x, y, radius, perspective));
+    }
+    // Paint far nodes first so near nodes sit on top (3D depth)
+    screen.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
+    if let Some(active) = selected {
+        if let Some(idx) = screen.iter().position(|p| p.0 == active) {
+            let item = screen.remove(idx);
+            screen.push(item);
+        }
+    }
+    let mut ui_nodes: Vec<GraphNodeData> = Vec::with_capacity(screen.len());
+    for (id, x, y, radius, perspective) in &screen {
+        let Some(note) = notes.iter().find(|n| &n.id == id) else { continue };
+        let deg = *degree.get(id).unwrap_or(&0);
+        let depth = ((perspective - 0.72) / (1.40 - 0.72)).clamp(0.0, 1.0);
         ui_nodes.push(GraphNodeData {
             id: note.id.to_string().into(),
             title: note.title.clone().into(),
-            x,
-            y,
-            radius,
+            x: *x,
+            y: *y,
+            radius: *radius,
             linked: deg,
             active: selected == Some(note.id),
+            depth,
         });
     }
-    let node_by_id: std::collections::HashMap<Uuid, &(Uuid, f32, f32, f32)> = screen.iter().map(|p| (p.0, p)).collect();
-    let mut ui_links: Vec<GraphLinkData> = Vec::with_capacity(edges.len());
+    let node_by_id: std::collections::HashMap<Uuid, &(Uuid, f32, f32, f32, f32)> = screen.iter().map(|p| (p.0, p)).collect();
+    let mut link_data: Vec<(f32, GraphLinkData)> = Vec::with_capacity(edges.len());
     for (a, b) in edges {
         let Some(a) = node_by_id.get(&a).copied() else { continue };
         let Some(b) = node_by_id.get(&b).copied() else { continue };
         let active = selected == Some(a.0) || selected == Some(b.0);
-        ui_links.push(GraphLinkData {
+        let depth = ((((a.4 - 0.72) / 0.68) + ((b.4 - 0.72) / 0.68)) * 0.5).clamp(0.0, 1.0);
+        link_data.push((depth, GraphLinkData {
             id: format!("{}:{}", a.0, b.0).into(),
             commands: format!("M {:.1} {:.1} L {:.1} {:.1}", a.1, a.2, b.1, b.2).into(),
             active,
-        });
+            depth,
+        }));
     }
+    link_data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let ui_links: Vec<GraphLinkData> = link_data.into_iter().map(|(_, l)| l).collect();
+    let screen_simple: Vec<(Uuid, f32, f32, f32)> = screen.iter().map(|(id, x, y, r, _)| (*id, *x, *y, *r)).collect();
     drop(s);
-    state.borrow_mut().graph_screen_positions = screen;
+    state.borrow_mut().graph_screen_positions = screen_simple;
     ui.set_graph_nodes(ModelRc::new(VecModel::from(ui_nodes)));
     ui.set_graph_links(ModelRc::new(VecModel::from(ui_links)));
     update_graph_panel(state, ui, selected);
@@ -697,7 +1125,7 @@ fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         let data: Vec<NoteData> = list
             .iter()
             .filter(|n| vault_filter.is_empty() || n.title.to_lowercase().contains(&vault_filter) || n.preview.to_lowercase().contains(&vault_filter))
-            .map(|n| note_to_data(n, &prefs))
+            .map(|n| note_to_data(n, &prefs, 400.0, Vec::new()))
             .collect();
         let first = data.first().and_then(|n| Uuid::parse_str(&n.id).ok());
         ui.set_vault_notes(ModelRc::new(VecModel::from(data)));
@@ -819,10 +1247,118 @@ fn change_vault_password(state: &mut AppState, current: &str, new_password: &str
 
 fn export_note_markdown(state: &AppState) -> anyhow::Result<()> {
     let Some(id) = state.current_id else { return Ok(()) };
+    export_note_markdown_by_id(state, id)
+}
+
+fn export_note_markdown_by_id(state: &AppState, id: Uuid) -> anyhow::Result<()> {
     let Some(note) = get_from_state(state, id) else { anyhow::bail!("note not found") };
     let filename = safe_filename(&note.title, "note") + ".md";
     let Some(path) = rfd::FileDialog::new().add_filter("Markdown", &["md"]).set_file_name(&filename).save_file() else { return Ok(()) };
     std::fs::write(path, format!("# {}\n\n{}\n", note.title, note.body))?;
+    Ok(())
+}
+
+fn apply_format_tool(body: &str, cursor: usize, tool: &str) -> String {
+    let cursor = cursor.min(body.len());
+    let line_idx = body[..cursor].matches('\n').count();
+    let mut lines: Vec<String> = body.lines().map(|l| l.to_string()).collect();
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    let idx = line_idx.min(lines.len() - 1);
+    let line = lines[idx].clone();
+    if tool == "table" || tool == "div" {
+        let block = if tool == "table" {
+            "\n| Column | Value |\n| :--- | :--- |\n|  |  |\n".to_string()
+        } else {
+            "\n---\n".to_string()
+        };
+        lines.insert(idx + 1, block.trim().to_string());
+        // table block needs its pipe rows as separate lines for sane rendering
+        if tool == "table" {
+            lines.remove(idx + 1);
+            lines.insert(idx + 1, "|  |  |".to_string());
+            lines.insert(idx + 1, "| :--- | :--- |".to_string());
+            lines.insert(idx + 1, "| Column | Value |".to_string());
+        }
+        return lines.join("\n");
+    }
+    let trimmed = line.trim();
+    let strip = |p: &str| -> String { trimmed.strip_prefix(p).map(str::to_string).unwrap_or_else(|| trimmed.to_string()) };
+    let has = |p: &str| trimmed.starts_with(p);
+    let new_line = match tool {
+        "bold" => format!("**{}**", if trimmed.is_empty() { "bold text" } else { trimmed }),
+        "italic" => format!("*{}*", if trimmed.is_empty() { "italic text" } else { trimmed }),
+        "underline" => format!("<u>{}</u>", if trimmed.is_empty() { "underlined text" } else { trimmed }),
+        "strike" => format!("~~{}~~", if trimmed.is_empty() { "struck text" } else { trimmed }),
+        "code" => format!("`{}`", if trimmed.is_empty() { "code" } else { trimmed }),
+        "link" => format!("[{}](https://)", if trimmed.is_empty() { "label" } else { trimmed }),
+        "wiki" => format!("[[{}]]", if trimmed.is_empty() { "note title" } else { trimmed }),
+        "h1" => {
+            if has("# ") { strip("# ") } else { format!("# {line}") }
+        }
+        "h2" => {
+            if has("## ") { strip("## ") } else { format!("## {line}") }
+        }
+        "h3" => {
+            if has("### ") { strip("### ") } else { format!("### {line}") }
+        }
+        "quote" => {
+            if has("> ") { strip("> ") } else { format!("> {line}") }
+        }
+        "ul" => {
+            if has("- ") { strip("- ") } else { format!("- {line}") }
+        }
+        "ol" => {
+            if has("1. ") { strip("1. ") } else { format!("1. {line}") }
+        }
+        "task" => {
+            let stripped = ["- [ ] ", "- [x] ", "- [X] "]
+                .iter()
+                .find_map(|p| trimmed.strip_prefix(p).map(|rest| rest.to_string()));
+            match stripped {
+                Some(rest) => rest,
+                None => format!("- [ ] {line}"),
+            }
+        }
+        _ => line,
+    };
+    lines[idx] = new_line;
+    lines.join("\n")
+}
+
+fn export_note_text(state: &AppState) -> anyhow::Result<()> {
+    let Some(id) = state.current_id else { return Ok(()) };
+    let Some(note) = get_from_state(state, id) else { anyhow::bail!("note not found") };
+    let filename = safe_filename(&note.title, "note") + ".txt";
+    let Some(path) = rfd::FileDialog::new().add_filter("Text", &["txt"]).set_file_name(&filename).save_file() else { return Ok(()) };
+    let mut out = String::new();
+    if !note.title.trim().is_empty() {
+        out.push_str(&note.title);
+        out.push_str("\n\n");
+    }
+    let items = parse_checklist_items(&note.body);
+    if items.is_empty() {
+        out.push_str(note.body.trim());
+        out.push('\n');
+    } else {
+        for item in &items {
+            out.push_str(if item.checked { "☑ " } else { "☐ " });
+            out.push_str(&item.text);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    let key = state.vault_key.clone();
+    let mut metas = notes_store::list_images(&state.db, id, key.as_ref()).unwrap_or_default();
+    metas.sort_by_key(|m| m.created_at);
+    if !metas.is_empty() {
+        out.push_str("Attachments\n");
+        for meta in &metas {
+            out.push_str(&format!("- {}\n", meta.name));
+        }
+    }
+    std::fs::write(path, out)?;
     Ok(())
 }
 
@@ -909,6 +1445,7 @@ fn suggestions_for_body(state: &AppState, body: &str) -> Vec<String> {
 fn editor_body_changed(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     let body: String = ui.get_editor_body().into();
     ui.set_word_count(word_count(&body));
+    ui.set_editor_body_height(editor_body_height_px(&body, 560.0));
     ui.set_editor_markdown(styled_markdown(&body));
     ui.set_checklist_items(ModelRc::new(VecModel::from(parse_checklist_items(&body))));
     let links: Vec<SharedString> = parse_wiki_links(&body).into_iter().map(shared).collect();
@@ -999,6 +1536,7 @@ fn lock_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         let mut s = state.borrow_mut();
         s.vault_key = None;
         s.current_id = None;
+        s.editor_note_id = None;
         s.graph_selected = None;
     }
     ui.set_vault_unlocked(false);
@@ -1033,7 +1571,21 @@ fn set_settings_stats(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     ui.set_settings_stats(shared(vault_stats(&s)));
 }
 
+// Older builds seeded a blue, pinned "Graph ideas" note. Remove it, but only
+// if it is byte-identical to that seed — if the user touched it, keep it.
+fn purge_legacy_blue_seed(state: &mut AppState) {
+    const TITLE: &str = "Graph ideas";
+    const BODY: &str = "Link this note to another with [[Welcome to Notes]] and open **Graph** from the rail.";
+    for id in list_all_ids(state) {
+        let Some(note) = get_from_state(state, id) else { continue };
+        if note.title == TITLE && note.body == BODY && note.color.as_deref() == Some("#1E3A5F") && note.pinned {
+            let _ = notes_store::delete_note_hard(&state.db, id);
+        }
+    }
+}
+
 fn unlock_and_seed(state: &mut AppState) -> anyhow::Result<()> {
+    purge_legacy_blue_seed(state);
     if state.seeded {
         return Ok(());
     }
@@ -1043,18 +1595,12 @@ fn unlock_and_seed(state: &mut AppState) -> anyhow::Result<()> {
             "Welcome to Notes",
             "# Welcome to Notes\n\nEverything stays on this device, encrypted when your vault is enabled.\n\n- **Ctrl+N** — new note\n- **Ctrl+F** — search / find\n- **[[Note title]]** — link notes into the graph\n- Tap the pen to draw, the image icon to attach a picture\n\nHappy writing.",
         );
-        let mut ideas = ycore::model::Note::new("Graph ideas", "Link this note to another with [[Welcome to Notes]] and open **Graph** from the rail.");
-        ideas.color = Some("#1E3A5F".to_string());
-        ideas.pinned = true;
         if state.vault_cfg.enabled {
             let mut welcome = welcome;
             welcome.encrypted = true;
-            ideas.encrypted = true;
             create_from_state(state, &welcome)?;
-            create_from_state(state, &ideas)?;
         } else {
             create_from_state(state, &welcome)?;
-            create_from_state(state, &ideas)?;
         }
     }
     state.seeded = true;
@@ -1136,41 +1682,10 @@ fn toast(ui: &MainWindow, msg: &str) {
     ui.set_toast_visible(true);
 }
 
-fn note_entry(s: &NoteSummary, prefs: &Prefs) -> (NoteData, f32) {
-    let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp);
-    (note_to_data(s, prefs), height)
-}
-
-fn distribute_columns(entries: Vec<(NoteData, f32)>, cols: usize) -> [Vec<NoteData>; 5] {
-    let cols = cols.clamp(1, 5);
-    let mut out: [Vec<NoteData>; 5] = Default::default();
-    let mut heights = [0.0_f32; 5];
-    for (note, height) in entries {
-        let mut best = 0;
-        for i in 1..cols {
-            if heights[i] < heights[best] {
-                best = i;
-            }
-        }
-        heights[best] += height + 12.0; // keep in sync with board spacing
-        out[best].push(note);
-    }
-    out
-}
-
-fn set_masonry_model(ui: &MainWindow, pinned: [Vec<NoteData>; 5], others: [Vec<NoteData>; 5]) {
-    let [p0, p1, p2, p3, p4] = pinned;
-    let [o0, o1, o2, o3, o4] = others;
-    ui.set_pinned_col_0(ModelRc::new(VecModel::from(p0)));
-    ui.set_pinned_col_1(ModelRc::new(VecModel::from(p1)));
-    ui.set_pinned_col_2(ModelRc::new(VecModel::from(p2)));
-    ui.set_pinned_col_3(ModelRc::new(VecModel::from(p3)));
-    ui.set_pinned_col_4(ModelRc::new(VecModel::from(p4)));
-    ui.set_notes_col_0(ModelRc::new(VecModel::from(o0)));
-    ui.set_notes_col_1(ModelRc::new(VecModel::from(o1)));
-    ui.set_notes_col_2(ModelRc::new(VecModel::from(o2)));
-    ui.set_notes_col_3(ModelRc::new(VecModel::from(o3)));
-    ui.set_notes_col_4(ModelRc::new(VecModel::from(o4)));
+fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>) -> (NoteData, f32) {
+    let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp, card_w)
+        + if s.image_count > 0 { 146.0 } else { 0.0 };
+    (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key)), height)
 }
 
 // ---------- list refresh ----------
@@ -1185,7 +1700,14 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         ui.set_pinned_notes(ModelRc::new(VecModel::from(Vec::<NoteData>::new())));
         ui.set_notes(ModelRc::new(VecModel::from(Vec::<NoteData>::new())));
         ui.set_note_count(0);
-        set_masonry_model(ui, Default::default(), Default::default());
+        *s.board_layout.borrow_mut() = BoardLayoutInfo::default();
+        ui.set_board_lefts(ModelRc::new(VecModel::from(Vec::<f32>::new())));
+        ui.set_board_tops(ModelRc::new(VecModel::from(Vec::<f32>::new())));
+        ui.set_board_cols(1);
+        ui.set_board_pin_w(240.0);
+        ui.set_board_notes_w(240.0);
+        ui.set_canvas_height(0.0);
+        ui.set_board_pin_block_h(0.0);
         ui.set_folders(ModelRc::new(VecModel::from(Vec::<FolderData>::new())));
         ui.set_tags(ModelRc::new(VecModel::from(Vec::<TagData>::new())));
         return;
@@ -1197,42 +1719,113 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         && s.active_tag.is_none()
         && (s.view == 0 || s.view == 1);
 
+    // Notion list rows are uniform 92px rows; Keep/Neomorph use estimated masonry heights.
+    let uniform_rows = ui.get_list_view() || ui.get_layout_style() == 1;
+
     let key = s.vault_key.clone();
     let filter = s.list_filter();
     let summaries = notes_store::list_notes_with_key(&s.db, &filter, key.as_ref()).unwrap_or_default();
     let prefs = s.prefs.clone();
 
-    let mut pinned_e: Vec<(NoteData, f32)> = Vec::new();
-    let mut others_e: Vec<(NoteData, f32)> = Vec::new();
-
+    // Partition first so per-section widths can size the height estimates:
+    // the webapp packs each grid on its own column count (layoutMasonry()),
+    // so a 2-card pinned section gets two wide columns, not the board width.
+    let mut pin_summaries: Vec<&NoteSummary> = Vec::new();
+    let mut oth_summaries: Vec<&NoteSummary> = Vec::new();
     if s.view == 1 {
-        others_e = summaries.iter().filter(|n| n.pinned).map(|n| note_entry(n, &prefs)).collect();
+        oth_summaries = summaries.iter().filter(|n| n.pinned).collect();
     } else if unfiltered && s.view == 0 {
         for n in &summaries {
             if n.pinned && prefs.pinned_first {
-                pinned_e.push(note_entry(n, &prefs));
+                pin_summaries.push(n);
             } else {
-                others_e.push(note_entry(n, &prefs));
+                oth_summaries.push(n);
             }
         }
     } else {
-        others_e = summaries.iter().map(|n| note_entry(n, &prefs)).collect();
+        oth_summaries = summaries.iter().collect();
     }
 
-    let cols = ui.get_grid_cols().clamp(1, 5) as usize;
-    let pinned_cols = distribute_columns(pinned_e, cols);
-    let others_cols = distribute_columns(others_e, cols);
-    let pinned_v: Vec<NoteData> = pinned_cols.iter().flatten().cloned().collect();
-    let others_v: Vec<NoteData> = others_cols.iter().flatten().cloned().collect();
-    set_masonry_model(ui, pinned_cols, others_cols);
+    // Columns/gap follow the webapp's masonryColCount() exactly.
+    let _ntot = summaries.len();
+    let board_w = s.board_width.unwrap_or(1100.0).max(240.0);
+    let compact = ui.get_compact();
+    let gap = if uniform_rows { 8.0f32 } else { web_masonry_gap(&prefs.density, compact) };
+    let cols = if uniform_rows { 1 } else { web_masonry_cols(board_w, &prefs.density, prefs.mobile_two, compact) };
+    let gcols = cols.max(1);
+    let pin_ncol = if pin_summaries.is_empty() { gcols } else { gcols.min(pin_summaries.len()) };
+    let oth_ncol = if oth_summaries.is_empty() { gcols } else { gcols.min(oth_summaries.len()) };
+    let item_w = (board_w - 20.0 - (gcols.saturating_sub(1) as f32) * gap) / gcols as f32;
+    let pin_item_w = (board_w - 20.0 - (pin_ncol.saturating_sub(1) as f32) * gap) / pin_ncol as f32;
+    let oth_item_w = (board_w - 20.0 - (oth_ncol.saturating_sub(1) as f32) * gap) / oth_ncol as f32;
+    if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+        eprintln!(
+            "[board] grid_cols={} board_w={} pin_cols={} oth_cols={} pin_w={:.1} oth_w={:.1}",
+            gcols, board_w, pin_ncol, oth_ncol, pin_item_w, oth_item_w
+        );
+    }
+
+    let pinned_e: Vec<(NoteData, f32)> = pin_summaries
+        .iter()
+        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref()))
+        .collect();
+    let others_e: Vec<(NoteData, f32)> = oth_summaries
+        .iter()
+        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref()))
+        .collect();
+
+    // Uniform grid: pinned first, then others, in the order they should render.
+    let pinned_heights: Vec<f32> = if uniform_rows { vec![68.0; pinned_e.len()] } else { pinned_e.iter().map(|(_, h)| *h).collect() };
+    let others_heights: Vec<f32> = if uniform_rows { vec![68.0; others_e.len()] } else { others_e.iter().map(|(_, h)| *h).collect() };
+    let pinned_v: Vec<NoteData> = pinned_e.into_iter().map(|(n, _)| n).collect();
+    let others_v: Vec<NoteData> = others_e.into_iter().map(|(n, _)| n).collect();
 
     let total = (pinned_v.len() + others_v.len()) as i32;
+    if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+        eprintln!(
+            "[board] refresh pin={} oth={} total={} oth_len={}",
+            pinned_v.len(),
+            others_v.len(),
+            total,
+            others_heights.len()
+        );
+    }
     let show_sections = s.view == 0 && !pinned_v.is_empty() && prefs.pinned_first;
+
+    let sectioned = show_sections;
+    let (lefts, tops, col_of, total_h, eff_cols, pin_block_h, pin_cols, oth_cols, layout_pin_w, layout_oth_w) =
+        compute_board_layout(&pinned_heights, &others_heights, gcols, item_w, gap, sectioned);
+    let all_heights: Vec<f32> = pinned_heights.iter().chain(others_heights.iter()).copied().collect();
+
+    {
+        *s.board_layout.borrow_mut() = BoardLayoutInfo {
+            lefts: lefts.clone(),
+            tops: tops.clone(),
+            heights: all_heights,
+            col_of,
+            cols: eff_cols,
+            pin_count: pinned_v.len(),
+            item_w,
+            pin_item_w: layout_pin_w,
+            oth_item_w: layout_oth_w,
+            pin_cols,
+            oth_cols,
+            pin_block_h,
+            gap,
+        };
+    }
 
     ui.set_pinned_section(show_sections);
     ui.set_pinned_notes(ModelRc::new(VecModel::from(pinned_v)));
     ui.set_notes(ModelRc::new(VecModel::from(others_v)));
     ui.set_note_count(total);
+    ui.set_board_lefts(ModelRc::new(VecModel::from(lefts)));
+    ui.set_board_tops(ModelRc::new(VecModel::from(tops)));
+    ui.set_board_cols(eff_cols as i32);
+    ui.set_board_pin_w(layout_pin_w);
+    ui.set_board_notes_w(layout_oth_w);
+    ui.set_canvas_height(if total == 0 { 360.0 } else { total_h });
+    ui.set_board_pin_block_h(pin_block_h);
 
     // Folders with counts
     let mut folder_rows: Vec<FolderData> = Vec::new();
@@ -1311,6 +1904,7 @@ fn load_note_images(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note_id: Uui
 fn apply_to_editor(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note: &ycore::model::Note) {
     ui.set_editor_title(note.title.clone().into());
     ui.set_editor_body(note.body.clone().into());
+    ui.set_editor_body_height(editor_body_height_px(&note.body, 560.0));
     let tags: Vec<SharedString> = note.tags.iter().map(|t| shared(t.clone())).collect();
     ui.set_editor_tags(ModelRc::new(VecModel::from(tags)));
     ui.set_editor_pinned(note.pinned);
@@ -1325,6 +1919,7 @@ fn apply_to_editor(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note: &ycore:
     ui.set_color_popover_open(false);
     ui.set_editor_markdown(styled_markdown(&note.body));
     ui.set_checklist_items(ModelRc::new(VecModel::from(parse_checklist_items(&note.body))));
+    ui.set_editor_checklist_mode(is_strict_checklist(&note.body));
     let links: Vec<SharedString> = parse_wiki_links(&note.body).into_iter().map(shared).collect();
     ui.set_editor_links(ModelRc::new(VecModel::from(links)));
     ui.set_timestamp_created(shared(note.created_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
@@ -1336,12 +1931,14 @@ fn apply_to_editor(state: &Rc<RefCell<AppState>>, ui: &MainWindow, note: &ycore:
 
 fn select_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid) {
     flush_note(state, ui);
+    prune_empty_editor_note(state);
     let note = {
         let s = state.borrow();
         get_from_state(&s, id)
     };
     if let Some(note) = note {
         state.borrow_mut().current_id = Some(id);
+        state.borrow_mut().editor_note_id = Some(id);
         apply_to_editor(state, ui, &note);
     }
 }
@@ -1349,6 +1946,9 @@ fn select_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow, id: Uuid) {
 fn flush_note(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     let maybe_id = state.borrow().current_id;
     let Some(id) = maybe_id else { return };
+    // Don't write the editor back unless the editor actually holds this note —
+    // otherwise we can blank a note whose view (vault/graph) never loaded the editor.
+    if state.borrow().editor_note_id != Some(id) { return; }
     let title: String = ui.get_editor_title().into();
     let body: String = ui.get_editor_body().into();
     let s = state.borrow();
@@ -1368,9 +1968,49 @@ fn show_toast_and_refresh(state: &Rc<RefCell<AppState>>, ui: &MainWindow, msg: &
 }
 
 fn deselect_after_leaving_view(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
-    state.borrow_mut().current_id = None;
+    let mut s = state.borrow_mut();
+    s.current_id = None;
+    s.editor_note_id = None;
+    drop(s);
     ui.set_has_note(false);
     ui.set_selected_id(SharedString::new());
+}
+
+// Google Keep deletes a note that is empty when you navigate away. If the
+// editor holds a note with no title, no body and no attachments, remove it
+// instead of persisting a dead row. Returns the deleted id, if any.
+fn prune_empty_editor_note(state: &Rc<RefCell<AppState>>) -> Option<Uuid> {
+    let id = state.borrow().editor_note_id?;
+    if state.borrow().current_id != Some(id) {
+        return None;
+    }
+    let s = state.borrow();
+    // Undecryptable (locked vault) or already gone -> keep as-is.
+    let note = get_from_state(&s, id)?;
+    if !note.title.trim().is_empty() || !note.body.trim().is_empty() {
+        return None;
+    }
+    let image_count: i64 = s
+        .db
+        .query_row(
+            "SELECT COUNT(*) FROM note_images WHERE note_id = ?",
+            rusqlite::params![id.to_string()],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if image_count > 0 {
+        return None;
+    }
+    let _ = notes_store::delete_note_hard(&s.db, id);
+    drop(s);
+    let mut s = state.borrow_mut();
+    if s.current_id == Some(id) {
+        s.current_id = None;
+    }
+    if s.editor_note_id == Some(id) {
+        s.editor_note_id = None;
+    }
+    Some(id)
 }
 
 // ---------- entry point ----------
@@ -1381,6 +2021,7 @@ pub fn run() -> anyhow::Result<()> {
 
 pub fn run_ui() -> anyhow::Result<()> {
     let ui = MainWindow::new()?;
+    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     let dir = data_dir();
     std::fs::create_dir_all(&dir)?;
     let config_path = dir.join("config.json");
@@ -1391,6 +2032,7 @@ pub fn run_ui() -> anyhow::Result<()> {
         dark: loaded.dark,
         seeded: loaded.seeded,
         current_id: None,
+        editor_note_id: None,
         view: 0,
         search: String::new(),
         active_folder: None,
@@ -1414,6 +2056,8 @@ pub fn run_ui() -> anyhow::Result<()> {
         doodle_strokes: Vec::new(),
         pending_note_images: Vec::new(),
         current_images: Vec::new(),
+        board_layout: std::cell::RefCell::new(BoardLayoutInfo::default()),
+        board_width: None,
     };
     let _ = loaded.value; // retained for forward-compatible config fields
 
@@ -1440,6 +2084,12 @@ pub fn run_ui() -> anyhow::Result<()> {
 
     // Initial refresh + preselect latest note (desktop, unlocked only)
     refresh_list(&state, &ui);
+    if state.borrow().prefs.layout == "obsidian" {
+        refresh_vault(&state, &ui);
+    }
+    if state.borrow().prefs.layout == "graph" {
+        refresh_graph(&state, &ui);
+    }
     let preselect_last = std::env::var("YELLOD_NOTES_OPEN_LAST").map(|v| v != "0").unwrap_or(true);
     if !state.borrow().vault_cfg.enabled && preselect_last {
         let s = state.borrow();
@@ -1481,6 +2131,29 @@ pub fn run_ui() -> anyhow::Result<()> {
         ui.on_search_changed(move |text| {
             st.borrow_mut().search = text.to_string();
             refresh_list(&st, &ui2);
+        });
+    }
+
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_board_metrics(move |width| {
+            if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+                eprintln!("[board] metrics width={}", width);
+            }
+            {
+                let mut s = st.borrow_mut();
+                s.board_width = Some(width);
+            }
+            refresh_list(&st, &ui2);
+        });
+    }
+
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_drag_move_rust(move |rel_x, rel_y| {
+            board_drag_target(&st, &ui2, rel_x, rel_y);
         });
     }
 
@@ -1550,6 +2223,19 @@ pub fn run_ui() -> anyhow::Result<()> {
         let ui2 = ui.clone_strong();
         let st = state.clone();
         ui.on_note_activated(move |id| {
+            if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+                eprintln!("[board] note_activated id={}", id);
+            }
+            if let Ok(fid) = Uuid::parse_str(&id) {
+                select_note(&st, &ui2, fid);
+            }
+        });
+    }
+
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_note_double_clicked(move |id| {
             if let Ok(fid) = Uuid::parse_str(&id) {
                 select_note(&st, &ui2, fid);
             }
@@ -1582,10 +2268,150 @@ pub fn run_ui() -> anyhow::Result<()> {
     {
         let ui2 = ui.clone_strong();
         let st = state.clone();
-        ui.on_manual_note_moved(move |id, direction| {
+        ui.on_card_archive(move |id| {
             if let Ok(nid) = Uuid::parse_str(&id) {
-                move_note_in_order(&st, &ui2, nid, direction);
+                let was = {
+                    let s = st.borrow();
+                    get_from_state(&s, nid).map(|n| n.archived).unwrap_or(false)
+                };
+                let s = st.borrow();
+                if let Some(mut note) = get_from_state(&s, nid) {
+                    note.archived = !note.archived;
+                    let _ = update_from_state(&s, &note);
+                    record_activity(&s, nid, if note.archived { "Archived" } else { "Unarchived" });
+                }
+                drop(s);
+                show_toast_and_refresh(&st, &ui2, if was { "Unarchived" } else { "Archived" });
             }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_color_picked(move |id, idx| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                {
+                    let s = st.borrow();
+                    if let Some(mut note) = get_from_state(&s, nid) {
+                        note.color = color_hex(idx);
+                        let _ = update_from_state(&s, &note);
+                    }
+                }
+                if st.borrow().current_id == Some(nid) {
+                    ui2.set_current_note_color_index(idx);
+                }
+                refresh_list(&st, &ui2);
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_checklist_toggle(move |id, line| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                {
+                    let s = st.borrow();
+                    if let Some(mut note) = get_from_state(&s, nid) {
+                        note.body = toggle_checklist_body(&note.body, line as usize);
+                        let _ = update_from_state(&s, &note);
+                    }
+                }
+                refresh_list(&st, &ui2);
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_export(move |id| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                let result = export_note_markdown_by_id(&st.borrow(), nid);
+                match result {
+                    Ok(()) => toast(&ui2, "Markdown exported"),
+                    Err(e) => toast(&ui2, &e.to_string()),
+                }
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_timestamps(move |id| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                let s = st.borrow();
+                if let Some(note) = get_from_state(&s, nid) {
+                    ui2.set_timestamp_created(shared(note.created_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
+                    ui2.set_timestamp_edited(shared(note.updated_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
+                    let rows: Vec<SharedString> = activity_strings(&s, nid).into_iter().map(shared).collect();
+                    ui2.set_timestamp_activity(ModelRc::new(VecModel::from(rows)));
+                    ui2.set_timestamps_open(true);
+                }
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_trash(move |id| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                let s = st.borrow();
+                if let Some(mut note) = get_from_state(&s, nid) {
+                    note.trashed = true;
+                    let _ = update_from_state(&s, &note);
+                    record_activity(&s, nid, "Moved to trash");
+                }
+                drop(s);
+                show_toast_and_refresh(&st, &ui2, "Moved to Trash");
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_restore(move |id| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                let s = st.borrow();
+                if let Some(mut note) = get_from_state(&s, nid) {
+                    note.trashed = false;
+                    let _ = update_from_state(&s, &note);
+                    record_activity(&s, nid, "Restored");
+                }
+                drop(s);
+                show_toast_and_refresh(&st, &ui2, "Restored");
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_card_delete_forever(move |id| {
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                let s = st.borrow();
+                let _ = notes_store::delete_note_hard(&s.db, nid);
+                drop(s);
+                refresh_list(&st, &ui2);
+                toast(&ui2, "Note deleted forever");
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
+        ui.on_drag_reorder(move |id, target| {
+            if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+                eprintln!("[board] reorder id={} target={}", id, target);
+            }
+            if let Ok(nid) = Uuid::parse_str(&id) {
+                if target >= 0 {
+                    move_note_to_index(&st, &ui2, nid, target as usize);
+                }
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        ui.on_drag_finish(move || {
+            let _ = &ui2;
         });
     }
 
@@ -1926,8 +2752,10 @@ pub fn run_ui() -> anyhow::Result<()> {
 
     {
         let ui2 = ui.clone_strong();
+        let st = state.clone();
         ui.on_toggle_view_mode(move || {
             ui2.set_list_view(!ui2.get_list_view());
+            refresh_list(&st, &ui2);
         });
     }
 
@@ -1950,7 +2778,9 @@ pub fn run_ui() -> anyhow::Result<()> {
         let st = state.clone();
         ui.on_back_to_list(move || {
             flush_note(&st, &ui2);
+            prune_empty_editor_note(&st);
             deselect_after_leaving_view(&st, &ui2);
+            refresh_list(&st, &ui2);
         });
     }
 
@@ -2193,7 +3023,13 @@ pub fn run_ui() -> anyhow::Result<()> {
         let st = state.clone();
         ui.on_composer_checklist_toggle(move || {
             let next = !ui2.get_composer_checklist_mode();
+            let cbody: String = ui2.get_composer_body().into();
+            let converted = if next { to_task_lines(&cbody) } else { from_task_lines(&cbody) };
+            if converted != cbody {
+                ui2.set_composer_body(converted.into());
+            }
             ui2.set_composer_checklist_mode(next);
+            composer_body_changed(&st, &ui2);
             ui2.set_composer_preview_mode(false);
             if next { composer_body_changed(&st, &ui2); }
         });
@@ -2272,6 +3108,9 @@ pub fn run_ui() -> anyhow::Result<()> {
         let st = state.clone();
         ui.on_attach_images(move || {
             if st.borrow().vault_cfg.enabled && st.borrow().vault_key.is_none() { return; }
+            // Open the picker first; create the note only if the user actually picks files.
+            let Some(paths) = pick_image_files() else { return };
+            if paths.is_empty() { return; }
             let id = st.borrow().current_id.unwrap_or_else(|| {
                 let mut note = ycore::model::Note::new("", "");
                 note.encrypted = st.borrow().vault_cfg.enabled;
@@ -2280,7 +3119,6 @@ pub fn run_ui() -> anyhow::Result<()> {
                 let _ = create_from_state(&s, &note);
                 id
             });
-            let Some(paths) = pick_image_files() else { return };
             let mut added = 0;
             let mut failed = 0;
             for path in paths {
@@ -2365,7 +3203,17 @@ pub fn run_ui() -> anyhow::Result<()> {
     }
     {
         let ui2 = ui.clone_strong();
-        ui.on_checklist_toggle(move || ui2.set_editor_checklist_mode(!ui2.get_editor_checklist_mode()));
+        let st = state.clone();
+        ui.on_checklist_toggle(move || {
+            let on = !ui2.get_editor_checklist_mode();
+            let body: String = ui2.get_editor_body().into();
+            let converted = if on { to_task_lines(&body) } else { from_task_lines(&body) };
+            if converted != body {
+                ui2.set_editor_body(converted.into());
+            }
+            ui2.set_editor_checklist_mode(on);
+            refresh_editor_after_body_edit(&st, &ui2);
+        });
     }
     {
         let ui2 = ui.clone_strong();
@@ -2548,7 +3396,8 @@ pub fn run_ui() -> anyhow::Result<()> {
             let next = !ui2.get_vault_source_mode();
             ui2.set_vault_source_mode(next);
             if next {
-                if let Some(id) = st.borrow().current_id {
+                let current = st.borrow().current_id;
+                if let Some(id) = current {
                     let s = st.borrow();
                     if let Some(note) = get_from_state(&s, id) { ui2.set_vault_source(note.body.clone().into()); }
                 }
@@ -2574,7 +3423,18 @@ pub fn run_ui() -> anyhow::Result<()> {
     }
     {
         let ui2 = ui.clone_strong();
-        ui.on_vault_open(move || ui2.set_has_note(true));
+        let st = state.clone();
+        ui.on_vault_open(move || {
+            let current = st.borrow().current_id;
+            if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+                eprintln!("[vault] open-note current_id={:?}", current);
+            }
+            if let Some(id) = current {
+                select_note(&st, &ui2, id);
+            } else if std::env::var_os("YELLOD_NOTES_DEBUG").is_some() {
+                eprintln!("[vault] open-note: no current_id");
+            }
+        });
     }
     {
         let ui2 = ui.clone_strong();
@@ -2593,6 +3453,20 @@ pub fn run_ui() -> anyhow::Result<()> {
     }
 
     // ---------- graph ----------
+    {
+        let st = state.clone();
+        let ui2 = ui.clone_strong();
+        ui.on_graph_tick(move || {
+            let idle = {
+                let s = st.borrow();
+                s.graph_drag.is_none() && s.graph_rotate.is_none()
+            };
+            if idle {
+                st.borrow_mut().graph_yaw += 0.0032;
+                refresh_graph(&st, &ui2);
+            }
+        });
+    }
     {
         let st = state.clone();
         ui.on_graph_pointer_down(move |x, y, _alt| {
@@ -2615,7 +3489,8 @@ pub fn run_ui() -> anyhow::Result<()> {
         let ui2 = ui.clone_strong();
         ui.on_graph_pointer_move(move |x, y, _alt| {
             let mut needs_refresh = false;
-            if let Some((id, _last_x, _last_y)) = st.borrow().graph_drag {
+            let drag = st.borrow().graph_drag;
+            if let Some((id, _last_x, _last_y)) = drag {
                 let screen = {
                     let s = st.borrow();
                     s.graph_screen_positions.iter().find(|p| p.0 == id).copied()
@@ -2630,7 +3505,8 @@ pub fn run_ui() -> anyhow::Result<()> {
                     }
                 }
                 needs_refresh = true;
-            } else if let Some((last_x, last_y)) = st.borrow().graph_rotate {
+            } else if let Some(rotate) = st.borrow().graph_rotate {
+                let (last_x, last_y) = rotate;
                 {
                     let mut s = st.borrow_mut();
                     let dx = x - last_x;
@@ -2905,6 +3781,27 @@ pub fn run_ui() -> anyhow::Result<()> {
         });
     }
     {
+        let st = state.clone();
+        let ui2 = ui.clone_strong();
+        ui.on_export_note_txt(move || {
+            let result = export_note_text(&st.borrow());
+            match result { Ok(()) => toast(&ui2, "Text exported"), Err(e) => toast(&ui2, &e.to_string()) }
+        });
+    }
+    {
+        let st = state.clone();
+        let ui2 = ui.clone_strong();
+        ui.on_format_tool(move |tool| {
+            let body: String = ui2.get_editor_body().into();
+            let cursor = ui2.get_editor_body_cursor_position().max(0) as usize;
+            let out = apply_format_tool(&body, cursor, &tool);
+            if out != body {
+                ui2.set_editor_body(out.into());
+                editor_body_changed(&st, &ui2);
+            }
+        });
+    }
+    {
         let ui2 = ui.clone_strong();
         let st = state.clone();
         ui.on_show_timestamps(move || {
@@ -3046,6 +3943,8 @@ pub fn run_ui() -> anyhow::Result<()> {
 
 
 
+    flush_note(&state, &ui);
+    prune_empty_editor_note(&state);
     ui.run()?;
     Ok(())
 }

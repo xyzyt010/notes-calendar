@@ -1,14 +1,30 @@
 // Full settings window: appearance, layout, behaviour, security and data.
 
 import { Theme } from "../../shared-ui/theme.slint";
-import { CheckBox } from "std-widgets.slint";
 import {
     IconMoon, IconSun, IconLayoutGrid, IconList, IconPanelLeft,
     IconGhost, IconDownload, IconUpload, IconTrash, IconLock, IconUnlock,
 } from "../../shared-ui/icons.slint";
 import {
-    IconButton, TextButton, Divider,
+    IconButton, TextButton, Divider, NoteCheckBox,
 } from "../../shared-ui/components.slint";
+
+// Web .set-check: 18px box, gap 10, label 14px, row padding 9px 0.
+component SettingsCheck inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    callback toggled();
+
+    height: 38px;
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.toggled(); } }
+    HorizontalLayout {
+        padding-top: 9px;
+        padding-bottom: 9px;
+        spacing: 10px;
+        VerticalLayout { alignment: center; NoteCheckBox { box-size: 18px; checked: root.checked; toggled => { root.toggled(); } } }
+        Text { text: root.label; font-size: 14px; color: Theme.text; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
+    }
+}
 
 export component SettingsView inherits Rectangle {
     in-out property <bool> dark: true;
@@ -52,24 +68,11 @@ export component SettingsView inherits Rectangle {
 
     width: 100%;
     height: 100%;
-    background: Theme.scrim;
-
-    TouchArea { clicked => { root.close(); } }
-
-    card := Rectangle {
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2 - 8px;
-        width: min(620px, parent.width - 32px);
-        height: min(720px, parent.height - 32px);
-        border-radius: Theme.r-xl;
-        background: Theme.surface;
-        border-width: 1px;
-        border-color: Theme.border-strong;
-        drop-shadow-blur: 36px;
-        drop-shadow-color: #00000080;
+    background: Theme.bg;
 
         Flickable {
-            width: 100%;
+            x: (parent.width - self.width) / 2;
+            width: min(744px, parent.width);
             height: 100%;
             content-width: self.width;
             content-height: content.preferred-height;
@@ -79,12 +82,12 @@ export component SettingsView inherits Rectangle {
 
                 HorizontalLayout {
                     height: 36px;
-                    Text { text: "Settings"; font-size: 22px; font-weight: 650; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                    Text { text: "Settings"; font-size: 22px; font-weight: 400; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
                     TextButton { label: "Done"; emphasis: true; clicked => { root.close(); } }
                 }
 
                 // ---------- Theme ----------
-                Text { text: "THEME"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Text { text: "Theme"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 HorizontalLayout {
                     spacing: 10px;
                     for choice[i] in [false, true]:
@@ -92,9 +95,9 @@ export component SettingsView inherits Rectangle {
                             height: 82px;
                             horizontal-stretch: 1;
                             border-radius: Theme.r-md;
-                            background: (choice == root.dark) ? Theme.accent-soft : Theme.surface-2;
-                            border-width: 1.5px;
-                            border-color: (choice == root.dark) ? Theme.accent : transparent;
+                            background: Theme.card-bg;
+                            border-width: 2px;
+                            border-color: (choice == root.dark) ? Theme.text : Theme.border;
                             TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => { root.theme-selected(choice); }
@@ -112,7 +115,8 @@ export component SettingsView inherits Rectangle {
                 }
 
                 // ---------- View style ----------
-                Text { text: "VIEW STYLE"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "View style"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 Text { text: "Applies to Notes, Archive and Trash."; font-size: 11.5px; color: Theme.text-faint; }
                 HorizontalLayout {
                     spacing: 8px;
@@ -121,9 +125,9 @@ export component SettingsView inherits Rectangle {
                             width: 102px;
                             height: 94px;
                             border-radius: Theme.r-md;
-                            background: root.layout == choice ? Theme.accent-soft : Theme.surface-2;
-                            border-width: 1.5px;
-                            border-color: root.layout == choice ? Theme.accent : transparent;
+                            background: Theme.card-bg;
+                            border-width: 2px;
+                            border-color: root.layout == choice ? Theme.text : Theme.border;
                             TouchArea { mouse-cursor: pointer; clicked => { root.layout-selected(choice); } }
                             VerticalLayout {
                                 padding: 7px;
@@ -136,7 +140,7 @@ export component SettingsView inherits Rectangle {
                                 if choice == 2:
                                     IconPanelLeft { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
                                 if choice == 3:
-                                    Rectangle { width: 22px; height: 22px; border-radius: 6px; background: Theme.neo-raised; }
+                                    Rectangle { width: 22px; height: 22px; border-radius: 6px; background: Theme.surface-3; }
                                 if choice == 4:
                                     Rectangle { width: 22px; height: 22px; border-radius: 11px; border-width: 1.5px; border-color: Theme.accent; background: transparent; }
                                 Text {
@@ -157,7 +161,8 @@ export component SettingsView inherits Rectangle {
                 }
 
                 // ---------- Density ----------
-                Text { text: "DENSITY"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "Density"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 HorizontalLayout {
                     spacing: 6px;
                     for choice[i] in [0, 1, 2]:
@@ -165,21 +170,18 @@ export component SettingsView inherits Rectangle {
                             height: 36px;
                             horizontal-stretch: 1;
                             border-radius: Theme.r-md;
-                            background: root.density == choice ? Theme.accent-soft : Theme.surface-2;
+                            background: root.density == choice ? Theme.card-bg : Theme.surface-2;
                             border-width: 1px;
-                            border-color: root.density == choice ? Theme.accent : transparent;
+                            border-color: root.density == choice ? Theme.text : transparent;
                             TouchArea { mouse-cursor: pointer; clicked => { root.density-selected(choice); } }
                             Text { text: choice == 0 ? "Compact" : choice == 1 ? "Cozy" : "Roomy"; font-size: 12.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
                         }
                 }
-                CheckBox {
-                    text: "Always two cards per row on phones";
-                    checked: root.mobile-two;
-                    toggled => { root.mobile-two-toggled(); }
-                }
+                SettingsCheck { label: "Always two cards per row on phones"; checked: root.mobile-two; toggled => { root.mobile-two-toggled(); } }
 
                 // ---------- Behaviour ----------
-                Text { text: "NOTES BEHAVIOUR"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "Notes behaviour"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 HorizontalLayout {
                     spacing: 6px;
                     Text { text: "Order by"; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; width: 54px; }
@@ -188,14 +190,14 @@ export component SettingsView inherits Rectangle {
                             height: 32px;
                             horizontal-stretch: 1;
                             border-radius: Theme.r-sm;
-                            background: root.sort == choice ? Theme.accent-soft : Theme.surface-2;
+                            background: root.sort == choice ? Theme.surface-3 : Theme.surface-2;
                             TouchArea { mouse-cursor: pointer; clicked => { root.sort-selected(choice); } }
                             Text { text: choice == 0 ? "Last edited" : choice == 1 ? "Created" : choice == 2 ? "Title A–Z" : "Manual"; font-size: 11.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
                         }
                 }
-                CheckBox { text: "Keep pinned notes in their own section"; checked: root.pinned-first; toggled => { root.pinned-first-toggled(); } }
-                CheckBox { text: "Render markdown inside cards"; checked: root.md-cards; toggled => { root.md-cards-toggled(); } }
-                CheckBox { text: "Show last-edited date on cards"; checked: root.show-dates; toggled => { root.show-dates-toggled(); } }
+                SettingsCheck { label: "Keep pinned notes in their own section"; checked: root.pinned-first; toggled => { root.pinned-first-toggled(); } }
+                SettingsCheck { label: "Render markdown inside cards"; checked: root.md-cards; toggled => { root.md-cards-toggled(); } }
+                SettingsCheck { label: "Show last-edited date on cards"; checked: root.show-dates; toggled => { root.show-dates-toggled(); } }
                 HorizontalLayout {
                     spacing: 6px;
                     Text { text: "Preview"; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; width: 54px; }
@@ -204,14 +206,15 @@ export component SettingsView inherits Rectangle {
                             height: 32px;
                             horizontal-stretch: 1;
                             border-radius: Theme.r-sm;
-                            background: root.clamp == choice ? Theme.accent-soft : Theme.surface-2;
+                            background: root.clamp == choice ? Theme.surface-3 : Theme.surface-2;
                             TouchArea { mouse-cursor: pointer; clicked => { root.clamp-selected(choice); } }
                             Text { text: choice == 0 ? "Unlimited" : choice + " lines"; font-size: 11.5px; font-weight: 600; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
                         }
                 }
 
                 // ---------- Markdown ----------
-                Text { text: "MARKDOWN"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "Markdown"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 Text { text: "[[Note title]] links notes together and drives the 3D graph."; font-size: 11.5px; color: Theme.text-dim; wrap: word-wrap; }
                 HorizontalLayout {
                     spacing: 8px;
@@ -221,7 +224,8 @@ export component SettingsView inherits Rectangle {
                 }
 
                 // ---------- Security ----------
-                Text { text: "SECURITY"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "Security"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle {
@@ -252,15 +256,17 @@ export component SettingsView inherits Rectangle {
                 if root.security-mode == 2:
                     Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.current-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Change"; emphasis: true; clicked => { root.change-password(root.current-password, root.new-password); } } } } }
                 if root.security-mode == 3:
-                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } CheckBox { text: "I understand other devices lose access and there is no server-side recovery."; checked: root.reset-acknowledged; toggled => { root.reset-acknowledged = !root.reset-acknowledged; } } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Reset"; danger: true; clicked => { root.reset-password(root.new-password, root.confirm-password, root.reset-acknowledged); } } } } }
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } SettingsCheck { label: "I understand other devices lose access and there is no server-side recovery."; checked: root.reset-acknowledged; toggled => { root.reset-acknowledged = !root.reset-acknowledged; } } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Reset"; danger: true; clicked => { root.reset-password(root.new-password, root.confirm-password, root.reset-acknowledged); } } } } }
 
                 // ---------- Data ----------
-                Text { text: "DATA"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "Data"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 Text { text: root.stats-text; font-size: 11.5px; color: Theme.text-dim; wrap: word-wrap; }
                 TextButton { label: "Empty trash"; danger: true; clicked => { root.empty-trash(); } }
 
                 // ---------- About ----------
-                Text { text: "ABOUT"; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; color: Theme.text-faint; }
+                Rectangle { height: 1px; background: Theme.divider; }
+                Text { text: "About"; font-size: 15px; font-weight: 500; color: Theme.text; }
                 HorizontalLayout {
                     spacing: 12px;
                     Rectangle { width: 44px; height: 44px; border-radius: 12px; background: Theme.accent-soft; HorizontalLayout { alignment: center; IconGhost { stroke-color: Theme.accent; preferred-width: 26px; preferred-height: 26px; } } }
@@ -271,6 +277,5 @@ export component SettingsView inherits Rectangle {
                     }
                 }
             }
-        }
     }
 }

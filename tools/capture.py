@@ -4,6 +4,14 @@ from ctypes import wintypes
 import subprocess
 from PIL import Image
 
+# This must run before any window sizing: without it Windows virtualizes
+# the window to the 96-DPI logical size and PrintWindow captures a clipped
+# top-left crop of the real high-DPI surface.
+try:
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)  # PER_MONITOR_AWARE_V2
+except Exception:
+    pass
+
 out = sys.argv[1] if len(sys.argv) > 1 else "app.png"
 pname = sys.argv[2] if len(sys.argv) > 2 else "notes.exe"
 title_match = sys.argv[3].lower() if len(sys.argv) > 3 else "notes"
