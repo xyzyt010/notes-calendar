@@ -744,11 +744,16 @@ synthetic evidence.
   (`#614A19` dark / `#FDE293` light, `Theme.mark-bg`). The "Untitled"
   placeholder is left unhighlighted, as in web's card title. Unit tests
   cover ranges and UTF-8 offsets (`cargo test -p notes`: 2/2). Verified
-  on Mint at 1536x864: native `boxes-roadmap.png` / `boxes-priya.png`
-  against a clean Brave capture (`web-cdp-roadmap.png`, isolated
-  `--user-data-dir`, password/analytics prompts suppressed, CDP-driven
-  search, `mark.search-hl` count = 1) — side-by-side
-  `vm-hl-side-by-side.png` shows identical fill and border geometry.
+  on Mint at 1536x864: final-release native `native-release-roadmap.png`
+  (`boxes-roadmap.png` / `boxes-priya.png` from the debug pass) against a
+  genuinely clean Brave capture `web-clean-final.png` — isolated
+  `--user-data-dir`, analytics banner suppressed at launch by setting
+  `brave.p3a.enabled=false` and `notice_acknowledged=true` in **both**
+  `Preferences` and `Local State` plus `--disable-features=BraveP3A,P3A`,
+  password manager disabled, CDP-driven unlock/search with
+  `mark.search-hl` count = 1. No banner/popup is cropped or overlaid.
+  Side-by-side `vm-hl-side-by-side-final.png` shows identical fill and
+  border geometry between the clean web shot and the final release.
   `cargo test --workspace` (ycore 15/15) and clippy green. Releases and
   the visible `DISPLAY=:0` instance were rebuilt after this pass; the
   user's Brave session was never killed.
