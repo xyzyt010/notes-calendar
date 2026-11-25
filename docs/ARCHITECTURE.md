@@ -483,10 +483,9 @@ web app. Unlock/create/change/reset flows, wrong-password banner, status bar
 indicator ("Local-first · Vault encrypted" / "Local-first · Private").
 
 **Search** — FTS5 porter tokenizer, debounced; matches in card titles and
-previews are tinted amber through segmented Slint `StyledText` `<font color>`
-spans, in-note find bar, `[[title]]` link autocomplete fed by note titles.
-Web fills a `<mark>` box behind matches; Slint 1.18 has no per-span
-background, so only the match foreground is tinted.
+previews get web-identical `<mark>` boxes (fill + 1px amber border) painted
+by transparent read-only `TextInput` selection layers over the plain text,
+in-note find bar, `[[title]]` link autocomplete fed by note titles.
 
 **Attachments** — images (jpg/png/gif/webp/bmp), encrypted with the vault key,
 thumbnails in grid cards, lightbox with download, doodle PNG export
@@ -724,27 +723,32 @@ synthetic evidence.
   composer, rail, Pinned/Others rows, raw previews, wrap titles,
   tall Fleet cards.
   `cargo test --workspace` (ycore 15/15) and clippy green.
-  **Known remaining gap:** web's filled `<mark>` box (background and
-  border) cannot be painted by Slint 1.18; search matches are tinted
-  foreground-only. (`strip_markdown` is kept for search snippets only;
+  **Known remaining gap:** none found in the looped components;
+  `StyledText` itself has no per-span backgrounds, but the mark box is
+  reproduced via `TextInput` selection layers (final pass below).
+  (`strip_markdown` is kept for search snippets only;
   checklist editing inputs are single-line on both sides — web uses
   `<input type=text>` — and card checklist rows wrap on both sides.)
   Everything else looped this pass matched the web reference.
-* **Search highlighting, final pass (2026-11-25)** — matched runs in card
-  titles and previews are now wrapped in `<font color>` segments built by
-  `highlighted_markdown` (`apps/notes/src/lib.rs`) and rendered by
-  `StyledText` (`apps/shared-ui/components.slint`), case-insensitively,
-  including single-character queries and multiple matches per note. Dark
-  tint `#F9AB00` / light `#B26F00` mirror web's `--mark-border`. Text is
-  markdown-escaped before segmenting so raw previews stay literal. The
-  "Untitled" placeholder is left unhighlighted like web's card title.
-  Unit tests cover case-insensitive char-safe ranges, single characters
-  and markdown escaping (`cargo test -p notes`: 2/2). Verified on Mint
-  at 1536x864 (Xvfb:99, isolated test profile): `hl-title.png` (body
-  `roadmap` amber), `hl-single.png` (single `a` across titles/bodies),
-  `hl-priya.png` (title `Priya` amber, typography unchanged). `cargo test
-  --workspace` (ycore 15/15) and clippy green. Final releases: Windows
-  `notes.exe` 14,985,216 bytes, `calendar.exe` 12,211,200 bytes; Linux
-  `notes` 19,842,904 bytes — all ≤ 20 MB. Visible `DISPLAY=:0` instance
-  relaunched on the final release (pid 3970081, test profile); the user's
-  Brave session was left untouched.
+* **Search mark boxes, final pass (2026-11-25)** — Slint 1.18's `StyledText`
+  cannot paint per-span backgrounds, but `TextInput` can: a transparent
+  read-only `TextInput` over the plain text, with `set-selection-offsets`
+  selecting exactly one match, paints its `selection-background-color` at
+  Slint's own wrapped glyph positions. `SearchMarkLayer` (one per match)
+  stacks those boxes behind the real text, and captures the selection's
+  start/end positions via `cursor-position-changed` to draw web's exact
+  1px `#F9AB00` border around each box. `MarkedText` reuses this for both
+  card titles and previews; byte ranges come from `query_ranges` /
+  `search_marks` (`apps/notes/src/lib.rs`), case-insensitive, char-safe,
+  including single-character queries. Fill is web's `--mark-bg`
+  (`#614A19` dark / `#FDE293` light, `Theme.mark-bg`). The "Untitled"
+  placeholder is left unhighlighted, as in web's card title. Unit tests
+  cover ranges and UTF-8 offsets (`cargo test -p notes`: 2/2). Verified
+  on Mint at 1536x864: native `boxes-roadmap.png` / `boxes-priya.png`
+  against a clean Brave capture (`web-cdp-roadmap.png`, isolated
+  `--user-data-dir`, password/analytics prompts suppressed, CDP-driven
+  search, `mark.search-hl` count = 1) — side-by-side
+  `vm-hl-side-by-side.png` shows identical fill and border geometry.
+  `cargo test --workspace` (ycore 15/15) and clippy green. Releases and
+  the visible `DISPLAY=:0` instance were rebuilt after this pass; the
+  user's Brave session was never killed.

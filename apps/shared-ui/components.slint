@@ -20,11 +20,18 @@ export struct NoteImageData {
     thumbnail: image,
 }
 
+export struct SearchMarkData {
+    // UTF-8 byte offsets into the source text (matches TextInput's API).
+    start: int,
+    end: int,
+}
+
 export struct NoteData {
     id: string,
     title: string,
     title-highlighted: bool,
     title-styled: styled-text,
+    title-marks: [SearchMarkData],
     preview: string,
     date-label: string,
     pinned: bool,
@@ -36,9 +43,122 @@ export struct NoteData {
     render-md: bool,
     preview-styled: styled-text,
     preview-highlighted: bool,   // search-match spans present in preview-styled
+    preview-marks: [SearchMarkData],
     checklist-items: [ChecklistItemData],
     is-checklist: bool,
     images: [NoteImageData],
+}
+
+// A transparent read-only TextInput whose selection paints exactly one web
+// <mark> box. Slint 1.18 has no per-span backgrounds, but TextInput's
+// selection uses the very same text layout, so stacking these over the plain
+// text gives pixel-exact boxes at wrapped positions.
+component SearchMarkLayer inherits TextInput {
+    in property <string> source-text;
+    in property <int> mark-start;
+    in property <int> mark-end;
+    in property <color> mark-fill;
+    in property <length> mark-font-size;
+    in property <int> mark-font-weight;
+    in property <bool> mark-wrap;
+    in property <float> mark-line-height;
+    in property <TextVerticalAlignment> mark-align: top;
+
+    // Captured exact glyph positions of the match's two ends. Slint fires
+    // cursor-position-changed from set-selection-offsets, so the border uses
+    // the very same layout as the selection fill.
+    property <int> capture-step;
+    property <length> edge-start-x;
+    property <length> edge-start-y;
+    property <length> edge-end-x;
+    property <length> edge-end-y;
+
+    x: 0;
+    y: 0;
+    width: 100%;
+    height: 100%;
+    text: source-text;
+    font-size: mark-font-size;
+    font-weight: mark-font-weight;
+    wrap: mark-wrap ? word-wrap : no-wrap;
+    single-line: false;
+    line-height-factor: mark-line-height;
+    vertical-alignment: mark-align;
+    read-only: true;
+    enabled: false;
+    color: transparent;
+    selection-foreground-color: transparent;
+    selection-background-color: mark-fill;
+    cursor-position-changed(pos) => {
+        if (capture-step == 1) {
+            edge-start-x = pos.x;
+            edge-start-y = pos.y;
+        }
+        if (capture-step == 2) {
+            edge-end-x = pos.x;
+            edge-end-y = pos.y;
+        }
+    }
+    init => {
+        capture-step = 1;
+        self.set-selection-offsets(mark-start, mark-start);
+        capture-step = 2;
+        self.set-selection-offsets(mark-end, mark-end);
+        capture-step = 0;
+        self.set-selection-offsets(mark-start, mark-end);
+    }
+    // Web mark.search-hl: 1px solid #F9AB00 border around the fill.
+    Rectangle {
+        x: min(edge-start-x, edge-end-x) - 1px;
+        y: min(edge-start-y, edge-end-y) - 1px;
+        width: abs(edge-end-x - edge-start-x) + 2px;
+        height: abs(edge-end-y - edge-start-y) + mark-font-size * 1.5 + 2px;
+        background: transparent;
+        border-width: 1px;
+        border-color: #F9AB00;
+        visible: edge-end-x > 0;
+    }
+}
+
+// Plain text plus one transparent selection layer per search match.
+export component MarkedText inherits Rectangle {
+    in property <string> source-text;
+    in property <[SearchMarkData]> marks;
+    in property <length> font-size: 12px;
+    in property <int> font-weight: 400;
+    in property <bool> wrap-words: true;
+    in property <float> line-height: 1.5;
+    in property <brush> text-color;
+    in property <color> mark-fill;
+    in property <TextVerticalAlignment> text-align: top;
+
+    // Paint the boxes first, then the real text on top: the TextInput's own
+    // glyphs are transparent, so only its selection rectangle is visible.
+    for mark in root.marks:
+        SearchMarkLayer {
+            source-text: root.source-text;
+            mark-start: mark.start;
+            mark-end: mark.end;
+            mark-fill: root.mark-fill;
+            mark-font-size: root.font-size;
+            mark-font-weight: root.font-weight;
+            mark-wrap: root.wrap-words;
+            mark-line-height: root.line-height;
+            mark-align: root.text-align;
+        }
+    Text {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        text: root.source-text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        line-height-factor: root.line-height;
+        color: root.text-color;
+        wrap: root.wrap-words ? word-wrap : no-wrap;
+        vertical-alignment: root.text-align;
+    }
 }
 
 export struct GraphNodeData {
@@ -597,17 +717,21 @@ export component NoteCard inherits Rectangle {
         // 15px badge always visible; unpinned = outline button on hover.
         HorizontalLayout {
             spacing: 8px;
-            // Search mode: web wraps matched title runs in <mark>; Slint can
-            // only tint the match foreground. StyledText has no font-weight
-            // or line-height-factor properties, so the matched title renders
-            // with the default weight instead of the card title's 500.
+            // Search mode: web wraps matched title runs in <mark>. Stacked
+            // transparent TextInput selections paint the fill at Slint's
+            // exact wrapped positions, preserving the title's typography.
             if root.note.title-highlighted:
-                StyledText {
+                MarkedText {
                     horizontal-stretch: 1;
-                    text: root.note.title-styled;
-                    default-font-size: 16.5px;
-                    default-color: Theme.card-title-ink;
-                    vertical-alignment: center;
+                    source-text: root.note.title;
+                    marks: root.note.title-marks;
+                    font-size: 16.5px;
+                    font-weight: 500;
+                    wrap-words: !root.compact;
+                    line-height: 1.4;
+                    text-color: Theme.card-title-ink;
+                    mark-fill: Theme.mark-bg;
+                    text-align: center;
                 }
             if !root.note.title-highlighted:
                 Text {
@@ -651,9 +775,22 @@ export component NoteCard inherits Rectangle {
                 }
         }
 
-        // One StyledText branch serves both prefs-md rendering and search
-        // highlighting (highlighted takes precedence in preview-styled).
-        if !root.note.is-checklist && (root.note.render-md || root.note.preview-highlighted):
+        // Search marks take precedence over the markdown-in-cards setting:
+        // web shows raw text with <mark> boxes in search results.
+        if !root.note.is-checklist && root.note.preview-highlighted:
+            MarkedText {
+                horizontal-stretch: 1;
+                vertical-stretch: root.compact ? 0 : 1;
+                source-text: root.note.preview;
+                marks: root.note.preview-marks;
+                font-size: 12px;
+                font-weight: 400;
+                wrap-words: !root.compact;
+                line-height: 1.5;
+                text-color: Theme.card-body-ink;
+                mark-fill: Theme.mark-bg;
+            }
+        if !root.note.is-checklist && root.note.render-md && !root.note.preview-highlighted:
             StyledText {
                 text: root.note.preview-styled;
                 default-font-size: 12px;

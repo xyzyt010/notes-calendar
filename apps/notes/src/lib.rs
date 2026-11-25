@@ -514,57 +514,11 @@ fn query_ranges(text: &str, query: &str) -> Vec<(usize, usize)> {
     out
 }
 
-/// Build CommonMark with search matches tinted amber (Slint has no
-/// background spans — the web `<mark>` box can't be painted in 1.18;
-/// `<font color>` is the documented segmented path). Text is
-/// markdown-escaped first so it renders literally, like the web.
-fn highlighted_markdown(text: &str, query: &str, dark: bool) -> Option<String> {
-    let q = query.trim();
-    if q.is_empty() {
-        return None;
-    }
-    let ranges = query_ranges(text, q);
-    if ranges.is_empty() {
-        return None;
-    }
-    let color = if dark { "#F9AB00" } else { "#B26F00" };
-    fn esc(s: &str, out: &mut String) {
-        for c in s.chars() {
-            if c.is_ascii_punctuation() {
-                out.push('\\');
-            }
-            out.push(c);
-        }
-    }
-    let mut md = String::with_capacity(text.len() + ranges.len() * 24);
-    let mut pos = 0usize;
-    // Split ranges at newlines: a font span must stay within one paragraph.
-    let mut segs: Vec<(usize, usize)> = Vec::new();
-    for &(a, b) in &ranges {
-        let mut start = a;
-        for (i, c) in text[a..b].char_indices() {
-            if c == '\n' {
-                if i > 0 {
-                    segs.push((start, a + i));
-                }
-                start = a + i + 1;
-            }
-        }
-        if start < b {
-            segs.push((start, b));
-        }
-    }
-    for (a, b) in &segs {
-        esc(&text[pos..*a], &mut md);
-        md.push_str("<font color=\"");
-        md.push_str(color);
-        md.push_str("\">");
-        esc(&text[*a..*b], &mut md);
-        md.push_str("</font>");
-        pos = *b;
-    }
-    esc(&text[pos..], &mut md);
-    Some(md)
+fn search_marks(text: &str, query: &str) -> Vec<SearchMarkData> {
+    query_ranges(text, query)
+        .into_iter()
+        .map(|(start, end)| SearchMarkData { start: start as i32, end: end as i32 })
+        .collect()
 }
 
 fn parse_checklist_items(body: &str) -> Vec<ChecklistItemData> {
@@ -852,18 +806,19 @@ fn is_strict_checklist(body: &str) -> bool {
     !items.is_empty() && items.len() == non_empty
 }
 
-fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>, query: &str, dark: bool) -> NoteData {
+fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteImageData>, query: &str) -> NoteData {
     let title = s.title.as_str();
     let preview = s.preview.as_str();
     let checklist_items = checklist_preview_items(preview, title, card_w);
     let is_checklist = !checklist_items.is_empty();
     let checklist_extra = if is_checklist { (checklist_items.len().saturating_sub(1) as f32) * 5.0 } else { 0.0 };
-    let highlighted = if is_checklist { None } else { highlighted_markdown(preview, query, dark) };
-    let preview_highlighted = highlighted.is_some();
-    // Web highlights note titles too (highlightHtml in noteTitle). Keep the
-    // "Untitled" placeholder untouched — it has no underlying title text.
-    let title_md = if title.is_empty() { None } else { highlighted_markdown(title, query, dark) };
-    let title_highlighted = title_md.is_some();
+    // Web wraps each match in a <mark>. Transparent TextInput selection
+    // layers in the UI paint those boxes at Slint's exact wrapped positions;
+    // the byte ranges are UTF-8 offsets as set-selection-offsets expects.
+    let marks = if is_checklist { Vec::new() } else { search_marks(preview, query) };
+    let preview_highlighted = !marks.is_empty();
+    let title_marks = if title.is_empty() { Vec::new() } else { search_marks(title, query) };
+    let title_highlighted = !title_marks.is_empty();
     NoteData {
         images: ModelRc::new(VecModel::from(images)),
         checklist_items: ModelRc::new(VecModel::from(checklist_items)),
@@ -871,7 +826,8 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         id: s.id.to_string().into(),
         title: title.into(),
         title_highlighted,
-        title_styled: title_md.map(|md| styled_markdown(&md)).unwrap_or_default(),
+        title_styled: styled_markdown(""),
+        title_marks: ModelRc::new(VecModel::from(title_marks)),
         // Web parity: card previews are the raw body text (markdown shown
         // literally, e.g. "# Welcome", "**Ctrl+N**"; app.js keeps newlines).
         preview: preview.into(),
@@ -883,8 +839,9 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         image_count: s.image_count as i32,
         card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
-        preview_styled: highlighted.map(|md| styled_markdown(&md)).unwrap_or_else(|| styled_markdown(preview)),
+        preview_styled: styled_markdown(preview),
         preview_highlighted,
+        preview_marks: ModelRc::new(VecModel::from(marks)),
     }
 }
 
@@ -1215,7 +1172,7 @@ fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
         let data: Vec<NoteData> = list
             .iter()
             .filter(|n| vault_filter.is_empty() || n.title.to_lowercase().contains(&vault_filter) || n.preview.to_lowercase().contains(&vault_filter))
-            .map(|n| note_to_data(n, &prefs, 400.0, Vec::new(), "", s.dark))
+            .map(|n| note_to_data(n, &prefs, 400.0, Vec::new(), ""))
             .collect();
         let first = data.first().and_then(|n| Uuid::parse_str(&n.id).ok());
         ui.set_vault_notes(ModelRc::new(VecModel::from(data)));
@@ -1776,10 +1733,10 @@ fn toast(ui: &MainWindow, msg: &str) {
     ui.set_toast_visible(true);
 }
 
-fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str, dark: bool) -> (NoteData, f32) {
+fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str) -> (NoteData, f32) {
     let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp, card_w)
         + if s.image_count > 0 { 146.0 } else { 0.0 };
-    (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query, dark), height)
+    (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query), height)
 }
 
 // ---------- list refresh ----------
@@ -1861,11 +1818,11 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
 
     let pinned_e: Vec<(NoteData, f32)> = pin_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref(), &s.search, s.dark))
+        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref(), &s.search))
         .collect();
     let others_e: Vec<(NoteData, f32)> = oth_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref(), &s.search, s.dark))
+        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref(), &s.search))
         .collect();
 
     // Uniform grid: pinned first, then others, in the order they should render.
@@ -4067,12 +4024,14 @@ mod highlight_tests {
     }
 
     #[test]
-    fn highlighted_markdown_scopes_matches_and_skips_clean_text() {
-        assert!(highlighted_markdown("plain text", "roadmap", true).is_none());
-        assert!(highlighted_markdown("roadmap", " ", true).is_none());
-        let md = highlighted_markdown("**roadmap**\nroadmap", "roadmap", false).unwrap();
-        assert!(md.contains("<font color=\"#B26F00\">"), "{md}");
-        assert_eq!(md.matches("<font").count(), 2);
-        assert!(md.contains("\\*\\*"), "markdown must be escaped: {md}");
+    fn search_marks_cover_every_match_with_utf8_offsets() {
+        assert!(search_marks("plain text", "roadmap").is_empty());
+        assert!(search_marks("roadmap", " ").is_empty());
+        let marks = search_marks("**roadmap**\nroadmap", "roadmap");
+        assert_eq!(marks.len(), 2);
+        assert_eq!((marks[0].start, marks[0].end), (2, 9));
+        assert_eq!((marks[1].start, marks[1].end), (12, 19));
+        let marks = search_marks("Über alles", "über");
+        assert_eq!((marks[0].start, marks[0].end), (0, 5));
     }
 }
