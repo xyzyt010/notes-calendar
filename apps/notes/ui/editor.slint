@@ -6,7 +6,7 @@ import {
     IconChevronLeft, IconPin, IconPinFilled, IconStar, IconStarFilled, IconArchive, IconArchiveArrowUp, IconTrash,
     IconUndo2, IconCopy, IconFolder, IconX, IconCircleCheck, IconPalette, IconMoreVert,
     IconImage, IconPencil, IconSquareCheck, IconFileText, IconSearch,
-    IconChevronUp, IconChevronDown, IconDownload,
+    IconChevronUp, IconChevronDown, IconDownload, IconExternalLink,
 } from "../../shared-ui/icons.slint";
 import {
     IconButton, FolderData, NoteImageData, ChecklistItemData, TextButton, NoteCheckBox,
@@ -26,8 +26,6 @@ export component EditorPane inherits Rectangle {
     in-out property <int> word-count: 0;
     in-out property <int> save-state: 0;          // 0 idle · 1 saving · 2 saved
     in-out property <string> edited-label: "";
-    in-out property <bool> folder-menu-open: false;
-    in-out property <bool> color-popover-open: false;
     in-out property <int> current-color-index: 0;
     in-out property <[NoteImageData]> current-images: [];
     in-out property <[ChecklistItemData]> checklist-items: [];
@@ -76,6 +74,7 @@ export component EditorPane inherits Rectangle {
     callback checklist-toggle-item(int);
     callback checklist-edit-item(int, string);
     callback checklist-remove-item(int);
+    callback open-link();
     callback link-clicked(string);
     callback find-changed();
     callback find-next();
@@ -367,6 +366,7 @@ export component EditorPane inherits Rectangle {
                 alignment: center;
                 IconButton { size: 36px; clicked => { root.find-open = !root.find-open; } IconSearch { stroke-color: Theme.icon; preferred-width: 19px; preferred-height: 19px; } }
                 IconButton { selected: root.checklist-mode; size: 36px; clicked => { root.checklist-toggle(); } IconSquareCheck { stroke-color: root.checklist-mode ? Theme.text : Theme.icon; preferred-width: 19px; preferred-height: 19px; } }
+                IconButton { size: 36px; clicked => { root.open-link(); } IconExternalLink { stroke-color: Theme.icon; preferred-width: 19px; preferred-height: 19px; } }
                 Rectangle { horizontal-stretch: 1; }
                 if !root.in-trash && !root.in-archive:
                     Rectangle {
@@ -429,88 +429,7 @@ export component EditorPane inherits Rectangle {
 
     }
 
-    // ===== Color swatch popover =====
-    if root.color-popover-open:
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            TouchArea { clicked => { root.color-popover-open = false; } }
-            Rectangle {
-                x: root.compact ? 46px : 94px;
-                y: 58px;
-                width: 278px;
-                height: 46px;
-                background: Theme.surface-2;
-                border-radius: 23px;
-                border-width: 1px;
-                border-color: Theme.border-strong;
-                drop-shadow-blur: 28px;
-                drop-shadow-offset-y: 4px;
-                drop-shadow-color: #00000060;
-                HorizontalLayout {
-                    x: 8px;
-
-                    width: parent.width - 16px;
-                    height: 30px;
-                    spacing: 5px;
-                    for idx[i] in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
-                        swatch := TouchArea {
-                            width: 20px;
-                            height: 30px;
-                            clicked => { root.color-picked(idx); root.color-popover-open = false; }
-                            Rectangle { width: 20px; height: 30px; border-radius: 6px; background: Theme.note-color(idx); border-width: root.current-color-index == idx ? 2px : 1px; border-color: root.current-color-index == idx ? Theme.accent : Theme.border-strong; }
-                        }
-                }
-            }
-        }
-
-    // ===== Folder dropdown =====
-    if root.folder-menu-open:
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            TouchArea { clicked => { root.folder-menu-open = false; } }
-            Rectangle {
-                x: root.compact ? 8px : 56px;
-                y: 58px;
-                width: 240px;
-                height: menuLayout.preferred-height;
-                border-radius: Theme.r-md;
-                background: Theme.surface;
-                border-width: 1px;
-                border-color: Theme.border-strong;
-                drop-shadow-blur: 24px;
-                drop-shadow-color: #00000055;
-                menuLayout := VerticalLayout {
-                    padding: 8px;
-                    spacing: 2px;
-                    HorizontalLayout {
-                        padding-left: 4px;
-                        padding-top: 2px;
-                        padding-bottom: 2px;
-                        Text { text: "MOVE TO FOLDER"; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: Theme.text-faint; }
-                    }
-                    noFolderRow := TouchArea {
-                        height: 36px;
-                        clicked => { root.assign-folder(""); }
-                        Rectangle { border-radius: Theme.r-sm; background: noFolderRow.has-hover ? Theme.surface-2 : transparent; }
-                        HorizontalLayout { x: 8px; width: 100%; height: 100%; Text { text: "No folder"; font-size: 13px; color: Theme.text; vertical-alignment: center; } }
-                    }
-                    for folder[f] in root.folders:
-                        folderRow := TouchArea {
-                            height: 36px;
-                            clicked => { root.assign-folder(folder.id); }
-                            Rectangle { border-radius: Theme.r-sm; background: folderRow.has-hover ? Theme.surface-2 : transparent; }
-                            HorizontalLayout {
-                                x: 8px;
-                                width: 100%;
-                                height: 100%;
-                                spacing: 8px;
-                                VerticalLayout { alignment: center; IconFolder { stroke-color: Theme.text-dim; preferred-width: 15px; preferred-height: 15px; } }
-                                Text { text: folder.name; font-size: 13px; color: Theme.text; vertical-alignment: center; overflow: elide; wrap: no-wrap; }
-                            }
-                        }
-                }
-            }
-        }
+    // NOTE: in-editor color/folder popovers were removed: they were dead UI
+    // (nothing ever set the open flags); color + folder live in the More
+    // popover (web #ed-more-pop parity).
 }

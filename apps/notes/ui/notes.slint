@@ -385,6 +385,7 @@ export component MainWindow inherits Window {
     callback checklist-remove-item(int);
     callback link-clicked(string);
     callback find-changed();
+    callback open-link();
     callback find-next();
     callback find-previous();
     callback close-find();
@@ -864,8 +865,6 @@ export component MainWindow inherits Window {
                                     word-count <=> root.word-count;
                                     save-state <=> root.save-state;
                                     edited-label <=> root.edited-label;
-                                    folder-menu-open <=> root.folder-menu-open;
-                                    color-popover-open <=> root.color-popover-open;
                                     current-color-index <=> root.current-note-color-index;
                                     current-images <=> root.current-images;
                                     checklist-items <=> root.checklist-items;
@@ -911,6 +910,7 @@ export component MainWindow inherits Window {
                                     checklist-remove-item(line) => { root.checklist-remove-item(line); }
                                     link-clicked(link) => { root.link-clicked(link); }
                                     find-changed => { root.find-changed(); }
+                                    open-link => { root.open-link(); }
                                     find-next => { root.find-next(); }
                                     find-previous => { root.find-previous(); }
                                     close-find => { root.close-find(); }
@@ -1081,8 +1081,6 @@ export component MainWindow inherits Window {
                                             word-count <=> root.word-count;
                                             save-state <=> root.save-state;
                                             edited-label <=> root.edited-label;
-                                            folder-menu-open <=> root.folder-menu-open;
-                                            color-popover-open <=> root.color-popover-open;
                                             more-toggled => { root.editor-more-popover-open = !root.editor-more-popover-open; }
                                             current-color-index <=> root.current-note-color-index;
                                             current-images <=> root.current-images;
@@ -1127,6 +1125,7 @@ export component MainWindow inherits Window {
                                             checklist-remove-item(line) => { root.checklist-remove-item(line); }
                                             link-clicked(link) => { root.link-clicked(link); }
                                             find-changed => { root.find-changed(); }
+                                    open-link => { root.open-link(); }
                                             find-next => { root.find-next(); }
                                             find-previous => { root.find-previous(); }
                                             close-find => { root.close-find(); }

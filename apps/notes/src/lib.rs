@@ -3532,6 +3532,36 @@ pub fn run_ui() -> anyhow::Result<()> {
     }
     {
         let ui2 = ui.clone_strong();
+        ui.on_open_link(move || {
+            let body: String = ui2.get_editor_body().into();
+            let cursor = (ui2.get_editor_body_cursor_position() as usize).min(body.len());
+            // Expand to the whitespace-delimited token under the caret.
+            let mut start = cursor;
+            while start > 0 && !body[..start].ends_with(char::is_whitespace) {
+                start -= body[..start].chars().next_back().map(|c| c.len_utf8()).unwrap_or(1);
+                if body[..start].ends_with(char::is_whitespace) { break; }
+            }
+            let mut end = cursor;
+            while end < body.len()
+                && !body[end..].starts_with(char::is_whitespace)
+            {
+                end += body[end..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            }
+            let token = &body[start..end];
+            let url = if token.starts_with("http://") || token.starts_with("https://") {
+                Some(token.to_string())
+            } else if token.starts_with("www.") {
+                Some(format!("https://{token}"))
+            } else {
+                None
+            };
+            if let Some(u) = url {
+                let _ = std::process::Command::new("xdg-open").arg(&u).spawn();
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
         let st = state.clone();
         ui.on_suggestion_picked(move |title| {
             let body: String = ui2.get_editor_body().into();
