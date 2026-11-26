@@ -156,10 +156,18 @@ export component SettingsView inherits Rectangle {
                             VerticalLayout {
                                 padding: 10px;
                                 spacing: 5px;
-                                if choice:
-                                    IconMoon { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
-                                if !choice:
-                                    IconSun { stroke-color: Theme.text; preferred-width: 19px; preferred-height: 19px; }
+                                // Web .tt-prev: mini two-tone preview block.
+                                Rectangle {
+                                    height: 30px;
+                                    border-radius: 6px;
+                                    background: choice ? #1F1F1F : #F1F3F4;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    clip: true;
+                                    Rectangle { x: 6px; y: 6px; width: 12px; height: 4px; border-radius: 2px; background: choice ? #9aa0a6 : #5f6368; }
+                                    Rectangle { x: 6px; y: 14px; width: 18px; height: 4px; border-radius: 2px; background: choice ? #5f6368 : #9aa0a6; }
+                                    Rectangle { x: 6px; y: 22px; width: 10px; height: 4px; border-radius: 2px; background: choice ? #3c4043 : #e8eaed; }
+                                }
                                 Text { text: choice ? "Dark" : "Light"; font-size: 13px; font-weight: 600; color: Theme.text; }
                             }
                         }
@@ -184,16 +192,33 @@ export component SettingsView inherits Rectangle {
                                 padding: 7px;
                                 spacing: 4px;
                                 alignment: center;
-                                if choice == 0:
-                                    IconLayoutGrid { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
-                                if choice == 1:
-                                    IconList { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
-                                if choice == 2:
-                                    IconPanelLeft { stroke-color: Theme.text-dim; preferred-width: 22px; preferred-height: 22px; }
-                                if choice == 3:
-                                    Rectangle { width: 22px; height: 22px; border-radius: 6px; background: Theme.surface-3; }
-                                if choice == 4:
-                                    Rectangle { width: 22px; height: 22px; border-radius: 11px; border-width: 1.5px; border-color: Theme.accent; background: transparent; }
+                                // Web .vt-prev: mini layout diagram per style.
+                                Rectangle {
+                                    width: 46px;
+                                    height: 30px;
+                                    clip: true;
+                                    if choice == 0:
+                                        Rectangle { x: 0px; y: 0px; width: 20px; height: 12px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 0px; y: 16px; width: 20px; height: 8px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 24px; y: 0px; width: 20px; height: 8px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 24px; y: 12px; width: 20px; height: 12px; border-radius: 2px; background: Theme.surface-3; }
+                                    if choice == 1:
+                                        Rectangle { x: 0px; y: 2px; width: 46px; height: 4px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 0px; y: 12px; width: 46px; height: 4px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 0px; y: 22px; width: 30px; height: 4px; border-radius: 2px; background: Theme.surface-3; }
+                                    if choice == 2:
+                                        Rectangle { x: 0px; y: 0px; width: 14px; height: 30px; border-radius: 2px; background: Theme.surface-3; }
+                                        Rectangle { x: 17px; y: 0px; width: 29px; height: 30px; border-radius: 2px; background: Theme.surface-2; }
+                                    if choice == 3:
+                                        Rectangle { x: 7px; y: 1px; width: 32px; height: 28px; border-radius: 8px; background: Theme.surface-3; border-width: 1px; border-color: Theme.border-strong; drop-shadow-blur: 8px; drop-shadow-offset-y: 3px; drop-shadow-color: #00000040; }
+                                    if choice == 4:
+                                        Rectangle { x: 4px; y: 4px; width: 6px; height: 6px; border-radius: 3px; background: Theme.accent; }
+                                        Rectangle { x: 32px; y: 8px; width: 6px; height: 6px; border-radius: 3px; background: Theme.surface-3; }
+                                        Rectangle { x: 18px; y: 20px; width: 6px; height: 6px; border-radius: 3px; background: Theme.surface-3; }
+                                        Rectangle { x: 7px; y: 7px; width: 1px; height: 13px; background: Theme.border-strong; }
+                                        Rectangle { x: 30px; y: 11px; width: 8px; height: 1px; background: Theme.border-strong; }
+                                        Rectangle { x: 21px; y: 23px; width: 11px; height: 1px; background: Theme.border-strong; }
+                                }
                                 Text {
                                     text: choice == 0 ? "Keep" : choice == 1 ? "Notion" : choice == 2 ? "Obsidian" : choice == 3 ? "Neomorph" : "3D graph";
                                     font-size: 11px;
@@ -202,10 +227,11 @@ export component SettingsView inherits Rectangle {
                                     horizontal-alignment: center;
                                 }
                                 Text {
-                                    text: choice == 0 ? "Masonry" : choice == 1 ? "Rows" : choice == 2 ? "Vault" : choice == 3 ? "Soft" : "Nodes";
-                                    font-size: 9px;
+                                    text: choice == 0 ? "Masonry cards, drag to reorder" : choice == 1 ? "Page rows, single column" : choice == 2 ? "Vault list, full text" : choice == 3 ? "Soft extruded cards" : "Note universe, spatial";
+                                    font-size: 8.5px;
                                     color: Theme.text-faint;
                                     horizontal-alignment: center;
+                                    wrap: word-wrap;
                                 }
                             }
                         }
