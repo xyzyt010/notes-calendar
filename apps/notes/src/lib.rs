@@ -837,7 +837,7 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         word_count: 0,
         color_index: color_index(&s.color),
         image_count: s.image_count as i32,
-        card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 146.0 } else { 0.0 }).min(1000.0),
+        card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 180.0 } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
         preview_styled: styled_markdown(preview),
         preview_highlighted,
@@ -1748,7 +1748,7 @@ fn toast(ui: &MainWindow, msg: &str) {
 
 fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str) -> (NoteData, f32) {
     let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp, card_w)
-        + if s.image_count > 0 { 146.0 } else { 0.0 };
+        + if s.image_count > 0 { 180.0 } else { 0.0 };
     (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query), height)
 }
 
@@ -2404,6 +2404,7 @@ pub fn run_ui() -> anyhow::Result<()> {
             if let Ok(nid) = Uuid::parse_str(&id) {
                 let s = st.borrow();
                 if let Some(note) = get_from_state(&s, nid) {
+                    ui2.set_timestamps_title(shared(note.title.clone()));
                     ui2.set_timestamp_created(shared(note.created_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
                     ui2.set_timestamp_edited(shared(note.updated_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
                     let rows: Vec<SharedString> = activity_strings(&s, nid).into_iter().map(shared).collect();
@@ -3872,6 +3873,7 @@ pub fn run_ui() -> anyhow::Result<()> {
             let Some(id) = st.borrow().current_id else { return };
             let s = st.borrow();
             if let Some(note) = get_from_state(&s, id) {
+                ui2.set_timestamps_title(shared(note.title.clone()));
                 ui2.set_timestamp_created(shared(note.created_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
                 ui2.set_timestamp_edited(shared(note.updated_at.with_timezone(&Local).format("%b %d, %Y · %I:%M %p").to_string()));
                 let rows: Vec<SharedString> = activity_strings(&s, id).into_iter().map(shared).collect();
