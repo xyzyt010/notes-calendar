@@ -66,7 +66,7 @@ impl Default for Prefs {
             pinned_first: true,
             md_cards: false,
             show_dates: false,
-            clamp: 5,
+            clamp: 0,
         }
     }
 }
@@ -933,7 +933,7 @@ fn activity_strings(s: &AppState, id: Uuid) -> Vec<String> {
     notes_store::list_activity(&s.db, id, 8)
         .unwrap_or_default()
         .into_iter()
-        .map(|row| format!("{} — {}", row.kind, row.created_at.with_timezone(&Local).format("%b %d, %I:%M %p")))
+        .map(|row| format!("{} — {}", row.kind, row.created_at.with_timezone(&Local).format("%b %d, %Y, %I:%M %p")))
         .collect()
 }
 
@@ -1506,11 +1506,23 @@ fn import_markdown_files(state: &mut AppState) -> anyhow::Result<usize> {
 fn recent_note_titles(state: &AppState, prefix: &str) -> Vec<String> {
     let key = state.vault_key.clone();
     let p = prefix.to_lowercase();
-    notes_store::list_notes_with_key(&state.db, &state.list_filter(), key.as_ref())
-        .unwrap_or_default()
+    // Web md-suggest searches the whole library (not the board view).
+    let filter = notes_store::ListFilter {
+        folder_id: None,
+        tag: None,
+        archived: false,
+        trashed: false,
+        favorites_only: false,
+        query: None,
+        sort: NotesSort::Title,
+        limit: 600,
+    };
+    let mut pool = notes_store::list_notes_with_key(&state.db, &filter, key.as_ref()).unwrap_or_default();
+    pool.sort_by_key(|n| n.title.to_lowercase());
+    pool
         .into_iter()
         .filter(|n| p.is_empty() || n.title.to_lowercase().starts_with(&p) || n.title.to_lowercase().contains(&p))
-        .take(5)
+        .take(8)
         .map(|n| n.title)
         .collect()
 }
@@ -3023,8 +3035,30 @@ pub fn run_ui() -> anyhow::Result<()> {
 
     {
         let ui2 = ui.clone_strong();
+        ui.on_password_edited(move || {
+            let pw: String = ui2.get_settings_new_password().into();
+            let n = pw.chars().count();
+            let has_letter = pw.chars().any(|c| c.is_alphabetic());
+            let has_digit = pw.chars().any(|c| c.is_ascii_digit());
+            let strength = match n {
+                0 => 0,
+                1..=7 => 1,
+                8..=11 => if has_digit || has_letter { 2 } else { 1 },
+                12..=15 => if has_digit && has_letter { 3 } else { 2 },
+                _ => if has_digit && has_letter { 4 } else { 3 },
+            };
+            ui2.set_settings_password_strength(strength);
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
         let st = state.clone();
         ui.on_change_password(move |current, new_password| {
+            let confirm: String = ui2.get_settings_confirm_password().into();
+            if new_password != confirm {
+                ui2.set_settings_security_error(shared("Passwords do not match.".to_string()));
+                return;
+            }
             let result = {
                 let mut s = st.borrow_mut();
                 change_vault_password(&mut s, &current, &new_password, true)

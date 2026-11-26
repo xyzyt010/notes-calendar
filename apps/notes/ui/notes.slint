@@ -295,6 +295,7 @@ export component MainWindow inherits Window {
     in-out property <string> image-preview-size: "";
     in-out property <string> settings-security-error: "";
     in-out property <int> settings-security-mode: 0;
+    in-out property <int> settings-password-strength: 0;
     in-out property <string> settings-new-password: "";
     in-out property <string> settings-confirm-password: "";
     in-out property <string> settings-current-password: "";
@@ -354,6 +355,7 @@ export component MainWindow inherits Window {
     callback vault-forgot();
     callback lock-now();
     callback create-vault(string, string);
+    callback password-edited();
     callback change-password(string, string);
     callback reset-password(string, string, bool);
     callback composer-open-requested();
@@ -1436,6 +1438,8 @@ export component MainWindow inherits Window {
                         clamp <=> root.card-clamp;
                         vault-enabled: root.vault-enabled;
                         security-mode <=> root.settings-security-mode;
+                        password-strength <=> root.settings-password-strength;
+                        password-edited => { root.password-edited(); }
                         new-password <=> root.settings-new-password;
                         confirm-password <=> root.settings-confirm-password;
                         current-password <=> root.settings-current-password;
@@ -1511,22 +1515,25 @@ export component MainWindow inherits Window {
 
                 if root.image-preview-open:
                     lightbox := Rectangle {
-                        width: 100%; height: 100%; background: #000000D9;
+                        width: 100%; height: 100%; background: rgba(0,0,0,0.82);
                         TouchArea { clicked => { root.close-image-preview(); } }
-                        IconButton {
-                            x: parent.width - 54px; y: 16px; size: 38px;
-                            clicked => { root.close-image-preview(); }
-                            Text { text: "×"; font-size: 25px; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        Rectangle {
+                            x: parent.width - 66px; y: 18px; width: 48px; height: 48px;
+                            border-radius: 24px;
+                            background: rgba(32,33,36,0.6);
+                            TouchArea { mouse-cursor: pointer; clicked => { root.close-image-preview(); } }
+                            Text { x: 0px; y: 0px; width: 100%; height: 100%; text: "×"; font-size: 25px; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                         }
                         Image {
-                            x: 40px; y: 48px; width: parent.width - 80px; height: parent.height - 140px;
+                            x: (parent.width - min(parent.width - parent.width / 12, 1100px)) / 2;
+                            y: 24px; width: min(parent.width - parent.width / 12, 1100px); height: parent.height - parent.height / 8 - 48px;
                             source: root.image-preview-image;
                             image-fit: contain;
                         }
                         HorizontalLayout {
                             x: 40px; y: parent.height - 62px; width: parent.width - 80px; height: 30px;
                             Text { text: root.image-preview-name + "  ·  " + root.image-preview-size; font-size: 12px; color: #e8eaed; vertical-alignment: center; horizontal-stretch: 1; }
-                            TextButton { label: "Download"; emphasis: true; clicked => { root.image-download-preview(); } }
+                            TextButton { label: "Download " + root.image-preview-name; emphasis: true; clicked => { root.image-download-preview(); } }
                         }
                     }
 

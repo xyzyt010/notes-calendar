@@ -167,6 +167,8 @@ export component EditorPane inherits Rectangle {
                             }
                             horizontal-stretch: 1;
                         }
+                        if root.find-query == "":
+                            Text { text: "Find in note..."; font-size: 14px; color: Theme.placeholder; vertical-alignment: center; }
                         Text {
                             text: root.find-query == "" ? "" : (root.find-count == 0 ? "0 of 0" : (root.find-index + 1) + " of " + root.find-count);
                             font-size: 12px;
@@ -408,17 +410,6 @@ export component EditorPane inherits Rectangle {
                         taR := TouchArea { mouse-cursor: pointer; clicked => { root.restore(); } }
                         VerticalLayout { alignment: center; padding-left: 11px; padding-right: 11px;
                             Text { text: "Restore"; font-size: 13px; font-weight: 500; color: Theme.text-dim; horizontal-alignment: center; vertical-alignment: center; }
-                        }
-                    }
-                if root.in-trash:
-                    Rectangle {
-                        height: 36px;
-                        min-width: 40px;
-                        border-radius: 9px;
-                        background: taF.has-hover ? Theme.danger-soft : transparent;
-                        taF := TouchArea { mouse-cursor: pointer; clicked => { root.delete-forever(); } }
-                        VerticalLayout { alignment: center; padding-left: 11px; padding-right: 11px;
-                            Text { text: "Delete forever"; font-size: 13px; font-weight: 500; color: Theme.danger; horizontal-alignment: center; vertical-alignment: center; }
                         }
                     }
                 IconButton { size: 36px; clicked => { root.export-note(); } IconDownload { stroke-color: Theme.icon; preferred-width: 19px; preferred-height: 19px; } }
