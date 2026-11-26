@@ -1883,6 +1883,16 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
     ui.set_pinned_notes(ModelRc::new(VecModel::from(pinned_v)));
     ui.set_notes(ModelRc::new(VecModel::from(others_v)));
     ui.set_note_count(total);
+    // Drawer counts are live totals per category (web updateDrawerCounts),
+    // independent of the current filter/search/view.
+    let drawer_live: i64 = s.db.query_row("SELECT COUNT(*) FROM notes WHERE trashed = 0 AND archived = 0", [], |r| r.get(0)).unwrap_or(0);
+    let drawer_pinned: i64 = s.db.query_row("SELECT COUNT(*) FROM notes WHERE trashed = 0 AND archived = 0 AND pinned = 1", [], |r| r.get(0)).unwrap_or(0);
+    let drawer_arch: i64 = s.db.query_row("SELECT COUNT(*) FROM notes WHERE trashed = 0 AND archived = 1", [], |r| r.get(0)).unwrap_or(0);
+    let drawer_trash: i64 = s.db.query_row("SELECT COUNT(*) FROM notes WHERE trashed = 1", [], |r| r.get(0)).unwrap_or(0);
+    ui.set_drawer_live_count(drawer_live as i32);
+    ui.set_drawer_pinned_count(drawer_pinned as i32);
+    ui.set_drawer_archive_count(drawer_arch as i32);
+    ui.set_drawer_trash_count(drawer_trash as i32);
     ui.set_board_lefts(ModelRc::new(VecModel::from(lefts)));
     ui.set_board_tops(ModelRc::new(VecModel::from(tops)));
     ui.set_board_cols(eff_cols as i32);
@@ -2873,6 +2883,7 @@ pub fn run_ui() -> anyhow::Result<()> {
             refresh_list(&st, &ui2);
             if idx == 2 { refresh_vault(&st, &ui2); }
             if idx == 4 { refresh_graph(&st, &ui2); }
+            toast(&ui2, match idx { 1 => "Notion layout", 2 => "Obsidian layout", 3 => "Neomorph layout", 4 => "3D graph layout", _ => "Keep layout" });
         });
     }
 
@@ -2911,7 +2922,7 @@ pub fn run_ui() -> anyhow::Result<()> {
                     toast(&ui2, "Vault unlocked");
                 }
                 Err(_) => {
-                    ui2.set_vault_error(shared("Wrong password. Your notes remain encrypted.".to_string()));
+                    ui2.set_vault_error(shared("Wrong password".to_string()));
                 }
             }
         });
@@ -2942,7 +2953,7 @@ pub fn run_ui() -> anyhow::Result<()> {
         let st = state.clone();
         ui.on_create_vault(move |password, confirm| {
             if password != confirm {
-                ui2.set_settings_security_error(shared("Passwords do not match".to_string()));
+                ui2.set_settings_security_error(shared("Passwords do not match.".to_string()));
                 return;
             }
             let result = {
@@ -2953,6 +2964,12 @@ pub fn run_ui() -> anyhow::Result<()> {
                 Ok(()) => {
                     ui2.set_vault_enabled(true);
                     ui2.set_settings_security_error(SharedString::new());
+                    ui2.set_settings_security_mode(0);
+                    ui2.set_settings_new_password(SharedString::new());
+                    ui2.set_settings_confirm_password(SharedString::new());
+                    ui2.set_settings_current_password(SharedString::new());
+                    ui2.set_settings_reset_acknowledged(false);
+                    save_config(&st.borrow());
                     {
                         let mut s = st.borrow_mut();
                         let _ = unlock_and_seed(&mut s);
@@ -2978,6 +2995,12 @@ pub fn run_ui() -> anyhow::Result<()> {
             match result {
                 Ok(()) => {
                     ui2.set_settings_security_error(SharedString::new());
+                    ui2.set_settings_security_mode(0);
+                    ui2.set_settings_new_password(SharedString::new());
+                    ui2.set_settings_confirm_password(SharedString::new());
+                    ui2.set_settings_current_password(SharedString::new());
+                    ui2.set_settings_reset_acknowledged(false);
+                    save_config(&st.borrow());
                     set_settings_stats(&st, &ui2);
                     refresh_list(&st, &ui2);
                     toast(&ui2, "Vault password changed");
@@ -2996,7 +3019,7 @@ pub fn run_ui() -> anyhow::Result<()> {
                 return;
             }
             if new_password != confirm {
-                ui2.set_settings_security_error(shared("Passwords do not match".to_string()));
+                ui2.set_settings_security_error(shared("Passwords do not match.".to_string()));
                 return;
             }
             let result = {
@@ -3006,6 +3029,12 @@ pub fn run_ui() -> anyhow::Result<()> {
             match result {
                 Ok(()) => {
                     ui2.set_settings_security_error(SharedString::new());
+                    ui2.set_settings_security_mode(0);
+                    ui2.set_settings_new_password(SharedString::new());
+                    ui2.set_settings_confirm_password(SharedString::new());
+                    ui2.set_settings_current_password(SharedString::new());
+                    ui2.set_settings_reset_acknowledged(false);
+                    save_config(&st.borrow());
                     set_settings_stats(&st, &ui2);
                     refresh_list(&st, &ui2);
                     toast(&ui2, "Vault password reset");

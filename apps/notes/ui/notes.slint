@@ -64,6 +64,10 @@ export component MainWindow inherits Window {
     in-out property <bool> show-dates: false;
     in-out property <int> card-clamp: 0;
     in-out property <int> note-count: 0;
+    in-out property <int> drawer-live-count: 0;
+    in-out property <int> drawer-pinned-count: 0;
+    in-out property <int> drawer-archive-count: 0;
+    in-out property <int> drawer-trash-count: 0;
     in-out property <int> grid-cols: 4;
     in-out property <bool> rail-hover: false;
     in-out property <bool> sidebar-open: false;
@@ -190,6 +194,11 @@ export component MainWindow inherits Window {
     in-out property <string> image-preview-name: "";
     in-out property <string> image-preview-size: "";
     in-out property <string> settings-security-error: "";
+    in-out property <int> settings-security-mode: 0;
+    in-out property <string> settings-new-password: "";
+    in-out property <string> settings-confirm-password: "";
+    in-out property <string> settings-current-password: "";
+    in-out property <bool> settings-reset-acknowledged: false;
     in-out property <string> settings-stats: "";
     in-out property <string> toast-message: "";
     in-out property <bool> toast-visible: false;
@@ -442,7 +451,7 @@ export component MainWindow inherits Window {
                                 padding-right: 10px;
                                 VerticalLayout { alignment: center; IconBrand { preferred-width: 24px; preferred-height: 24px; stroke-color: Theme.text-dim; } }
                                 Text {
-                                    text: "Notes";
+                                    text: root.active-view == 0 ? (root.active-folder != "" ? "Folder" : (root.active-tag != "" ? "# " + root.active-tag : "Notes")) : root.active-view == 1 ? "Pinned" : root.active-view == 2 ? "Favorites" : root.active-view == 3 ? "Archived" : "Trash";
                                     font-size: 22px;
                                     font-weight: 400;
                                     color: Theme.text-dim;
@@ -531,24 +540,24 @@ export component MainWindow inherits Window {
                                         sideColumn := VerticalLayout {
                                             spacing: 2px;
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.note-count + ""; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.drawer-live-count == 0 ? "" : root.drawer-live-count + ""; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
                                                 RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: ""; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: root.drawer-pinned-count == 0 ? "" : root.drawer-pinned-count + ""; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
                                                 RailRow { selected: root.active-view == 1; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: ""; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: root.drawer-archive-count == 0 ? "" : root.drawer-archive-count + ""; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
                                                 RailRow { selected: root.active-view == 3; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             if root.sidebar-open || root.rail-hover:
-                                                SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: ""; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+                                                SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: root.drawer-trash-count == 0 ? "" : root.drawer-trash-count + ""; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
                                             if !(root.sidebar-open || root.rail-hover):
                                                 RailRow { selected: root.active-view == 4; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             // web .drawer-sep spacing
                                             Rectangle { height: 8px; }
-                                            if root.active-view == 4 && root.note-count > 0:
+                                            if root.active-view == 4:
                                                 trashWrap := VerticalLayout {
                                                     spacing: 2px;
                                                     if root.sidebar-open || root.rail-hover:
@@ -1309,6 +1318,11 @@ export component MainWindow inherits Window {
                         show-dates <=> root.show-dates;
                         clamp <=> root.card-clamp;
                         vault-enabled: root.vault-enabled;
+                        security-mode <=> root.settings-security-mode;
+                        new-password <=> root.settings-new-password;
+                        confirm-password <=> root.settings-confirm-password;
+                        current-password <=> root.settings-current-password;
+                        reset-acknowledged <=> root.settings-reset-acknowledged;
                         security-error <=> root.settings-security-error;
                         stats-text: root.settings-stats;
                         about-version: root.app-version;

@@ -9,6 +9,41 @@ import {
     IconButton, TextButton, Divider, NoteCheckBox,
 } from "../../shared-ui/components.slint";
 
+// Web .pw-fields input: 50px, 1px border, radius 10, 16px, focus 2px.
+// Bare TextInput renders invisible in Slint, so every password field is
+// wrapped in a bordered box with a placeholder overlay.
+component SettingsPasswordField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: "Password";
+
+    height: 50px;
+    border-radius: 10px;
+    background: transparent;
+    border-width: field.has-focus ? 2px : 1px;
+    border-color: field.has-focus ? Theme.icon : Theme.border;
+    clip: true;
+    field := TextInput {
+        x: 16px;
+        width: parent.width - 32px;
+        height: 100%;
+        input-type: InputType.password;
+        font-size: 15px;
+        color: Theme.text;
+        vertical-alignment: center;
+        text <=> root.text;
+    }
+    if root.text == "":
+        Text {
+            x: 16px;
+            width: parent.width - 32px;
+            height: 100%;
+            text: root.placeholder;
+            font-size: 15px;
+            color: Theme.text-faint;
+            vertical-alignment: center;
+        }
+}
+
 // Web .set-check: 18px box, gap 10, label 14px, row padding 9px 0.
 component SettingsCheck inherits Rectangle {
     in property <string> label;
@@ -35,8 +70,8 @@ export component SettingsView inherits Rectangle {
     in-out property <int> sort: 0;        // 0 updated · 1 created · 2 title · 3 manual
     in-out property <bool> pinned-first: true;
     in-out property <bool> md-cards: false;
-    in-out property <bool> show-dates: true;
-    in-out property <int> clamp: 5;
+    in-out property <bool> show-dates: false;
+    in-out property <int> clamp: 0;
     in-out property <bool> vault-enabled: false;
     in-out property <int> security-mode: 0; // 0 overview · 1 enable · 2 change · 3 reset
     in-out property <string> security-error: "";
@@ -122,7 +157,7 @@ export component SettingsView inherits Rectangle {
                     spacing: 8px;
                     for choice[i] in [0, 1, 2, 3, 4]:
                         Rectangle {
-                            width: 102px;
+                            width: (parent.width - 32px) / 5;
                             height: 94px;
                             border-radius: Theme.r-md;
                             background: Theme.card-bg;
@@ -252,11 +287,11 @@ export component SettingsView inherits Rectangle {
                         TextButton { label: "Lock now"; clicked => { root.lock-now(); } }
                     }
                 if root.security-mode == 1:
-                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Encrypt notes"; emphasis: true; clicked => { root.create-vault(root.new-password, root.confirm-password); } } } } }
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 16px; spacing: 12px; Text { text: "Set an encryption password. Every note is re-encrypted to this device's key."; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; } SettingsPasswordField { placeholder: "New password (min 8 characters)"; text <=> root.new-password; } SettingsPasswordField { placeholder: "Confirm new password"; text <=> root.confirm-password; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Encrypt notes"; emphasis: true; clicked => { root.create-vault(root.new-password, root.confirm-password); } } } } }
                 if root.security-mode == 2:
-                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.current-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Change"; emphasis: true; clicked => { root.change-password(root.current-password, root.new-password); } } } } }
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 16px; spacing: 12px; Text { text: "Proves the current password, then re-encrypts every note to the new key on this device. Keep this window open until it finishes."; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; } SettingsPasswordField { placeholder: "Current password"; text <=> root.current-password; } SettingsPasswordField { placeholder: "New password (min 8 characters)"; text <=> root.new-password; } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Change"; emphasis: true; clicked => { root.change-password(root.current-password, root.new-password); } } } } }
                 if root.security-mode == 3:
-                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 10px; spacing: 7px; TextInput { text <=> root.new-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } TextInput { text <=> root.confirm-password; input-type: InputType.password; font-size: 13px; color: Theme.text; } SettingsCheck { label: "I understand other devices lose access and there is no server-side recovery."; checked: root.reset-acknowledged; toggled => { root.reset-acknowledged = !root.reset-acknowledged; } } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Reset"; danger: true; clicked => { root.reset-password(root.new-password, root.confirm-password, root.reset-acknowledged); } } } } }
+                    Rectangle { border-radius: Theme.r-md; background: Theme.surface-2; VerticalLayout { padding: 16px; spacing: 12px; Text { text: "Because this device already holds your encryption key, you can set a new password without the old one. Other devices stay locked until they use the new password."; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; } SettingsPasswordField { placeholder: "New password (min 8 characters)"; text <=> root.new-password; } SettingsPasswordField { placeholder: "Confirm new password"; text <=> root.confirm-password; } SettingsCheck { label: "I understand other devices lose access and there is no server-side recovery."; checked: root.reset-acknowledged; toggled => { root.reset-acknowledged = !root.reset-acknowledged; } } if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Reset"; danger: true; clicked => { root.reset-password(root.new-password, root.confirm-password, root.reset-acknowledged); } } } } }
 
                 // ---------- Data ----------
                 Rectangle { height: 1px; background: Theme.divider; }

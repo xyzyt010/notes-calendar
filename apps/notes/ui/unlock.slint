@@ -63,9 +63,9 @@ export component UnlockOverlay inherits Rectangle {
                     }
                     Text {
                         text: root.mode == 1
-                            ? "Enter your password to decrypt your notes on this device."
+                            ? "Welcome back. Enter your password to decrypt your notes on this device."
                             : "Choose a strong password. It encrypts every title, body, tag and image on this device.";
-                        font-size: 13px;
+                        font-size: 14px;
                         color: Theme.text-dim;
                         wrap: word-wrap;
                         horizontal-alignment: center;
@@ -78,8 +78,8 @@ export component UnlockOverlay inherits Rectangle {
                         border-width: passwordInput.has-focus ? 2px : 1px;
                         border-color: passwordInput.has-focus ? Theme.icon : Theme.border;
                         passwordInput := TextInput {
-                            x: 14px;
-                            width: parent.width - 54px;
+                            x: 17px;
+                            width: parent.width - 60px;
                             height: 100%;
                             input-type: root.show-password ? InputType.text : InputType.password;
                             font-size: 15px;
@@ -95,6 +95,16 @@ export component UnlockOverlay inherits Rectangle {
                                 reject
                             }
                         }
+                        if root.password == "":
+                            Text {
+                                x: 17px;
+                                width: parent.width - 60px;
+                                height: 100%;
+                                text: root.mode == 1 ? "Password" : "New password (min 8 characters)";
+                                font-size: 15px;
+                                color: Theme.text-faint;
+                                vertical-alignment: center;
+                            }
                         IconButton {
                             x: parent.width - 42px;
                             y: 8px;
@@ -114,8 +124,8 @@ export component UnlockOverlay inherits Rectangle {
                             border-width: confirmInput.has-focus ? 2px : 1px;
                             border-color: confirmInput.has-focus ? Theme.icon : Theme.border;
                             confirmInput := TextInput {
-                                x: 14px;
-                                width: parent.width - 28px;
+                                x: 17px;
+                                width: parent.width - 34px;
                                 height: 100%;
                                 input-type: root.show-password ? InputType.text : InputType.password;
                                 font-size: 15px;
@@ -128,29 +138,58 @@ export component UnlockOverlay inherits Rectangle {
                                     reject
                                 }
                             }
+                            if root.confirm == "":
+                                Text {
+                                    x: 17px;
+                                    width: parent.width - 34px;
+                                    height: 100%;
+                                    text: "Confirm new password";
+                                    font-size: 15px;
+                                    color: Theme.text-faint;
+                                    vertical-alignment: center;
+                                }
                         }
-                    if root.error != "":
-                        Text {
-                            text: root.error;
-                            font-size: 13px;
-                            color: #D93025;
-                            wrap: word-wrap;
-                        }
+                    // Web .auth-error reserves 18px; keep the card stable when empty.
+                    Text {
+                        height: 18px;
+                        text: root.error;
+                        font-size: 13px;
+                        color: #D93025;
+                        wrap: word-wrap;
+                    }
                     TextButton {
                         label: root.mode == 1 ? "Unlock" : "Create vault";
                         emphasis: true;
+                        btn-h: 44px;
                         clicked => {
                             if root.mode == 1 { root.unlock(); } else { root.create-vault(); }
                         }
                     }
                     if root.mode == 1:
-                        TextButton { label: "Forgot password?"; clicked => { root.forgot(); } }
-                    Text {
-                        text: "AES-256-GCM · keys stay on this device";
-                        font-size: 10.5px;
-                        color: Theme.text-faint;
-                        horizontal-alignment: center;
-                    }
+                        // Web .auth-alt a: #8AB4F8 14px centered link.
+                        Rectangle {
+                            height: 28px;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.forgot(); }
+                            }
+                            Text {
+                                width: 100%;
+                                height: 100%;
+                                text: "Forgot password?";
+                                font-size: 14px;
+                                color: #8AB4F8;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    if root.mode == 0:
+                        Text {
+                            text: "AES-256-GCM · keys stay on this device";
+                            font-size: 10.5px;
+                            color: Theme.text-faint;
+                            horizontal-alignment: center;
+                        }
                 }
             }
         }

@@ -1133,9 +1133,10 @@ export component TextButton inherits Rectangle {
     in-out property <bool> emphasis: false;
     in-out property <bool> danger: false;
     in property <bool> text-only: false; // web .btn-text: transparent bg, text-sec ink, 500 14px
+    in property <length> btn-h: 0px; // web overrides (auth-actions 44px)
     callback clicked();
 
-    height: root.text-only ? 40px : 38px;
+    height: root.btn-h > 0px ? root.btn-h : root.text-only ? 40px : 38px;
     min-width: root.text-only ? 0px : 76px;
     horizontal-stretch: 0;
     border-radius: root.text-only ? 9px : 9px;

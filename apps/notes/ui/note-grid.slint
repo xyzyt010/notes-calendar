@@ -108,28 +108,7 @@ export component NoteListPanel inherits Rectangle {
     private property <int> tot: root.pinned-notes.length + root.notes.length;
 
     VerticalLayout {
-        if root.view-title != "" || (root.active-view == 4 && root.note-count > 0):
-            HorizontalLayout {
-                height: 34px;
-                padding-top: 2px;
-                padding-left: 6px;
-                padding-right: 4px;
-                Text {
-                    text: root.view-title;
-                    font-size: 14px;
-                    font-weight: 500;
-                    color: Theme.text-dim;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                if root.active-view == 4 && root.note-count > 0:
-                    TextButton {
-                        label: "Empty trash";
-                        danger: true;
-                        clicked => { root.ask-empty-trash(); }
-                    }
-            }
-
+        // Web has no board header row; the view name lives in the topbar.
         scroll := Flickable {
             vertical-stretch: 1;
             mouse-drag-pan-enabled: false;
@@ -197,7 +176,7 @@ export component NoteListPanel inherits Rectangle {
                         x: 8px + root.row-x;
                         y: root.composer-space + root.pin-block-h + 10px;
                         height: 20px;
-                        text: "Others";
+                        text: root.active-view == 3 ? "Archived" : root.active-view == 4 ? "In trash" : "Others";
                         font-size: 14px;
                         font-weight: 500;
                         color: Theme.text-dim;
