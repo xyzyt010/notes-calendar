@@ -38,7 +38,7 @@ export component VaultView inherits Rectangle {
         // ===== List sidebar =====
         Rectangle {
             width: 260px;
-            background: Theme.surface;
+            background: Theme.drawer-bg;
             VerticalLayout {
                 padding: 12px;
                 spacing: 8px;
@@ -50,7 +50,7 @@ export component VaultView inherits Rectangle {
                 Rectangle {
                     height: 32px;
                     border-radius: 6px;
-                    background: Theme.bg;
+                    background: Theme.surface;
                     HorizontalLayout {
                         padding-left: 10px;
                         padding-right: 8px;
@@ -76,7 +76,7 @@ export component VaultView inherits Rectangle {
                         for note[i] in root.notes:
                             row := Rectangle {
                                 height: 36px;
-                                background: note.id == root.selected-id ? (Theme.dark ? Theme.bg : #FFFFFF) : (rowTouch.has-hover ? Theme.icon-hover-bg : transparent);
+                                background: note.id == root.selected-id ? Theme.surface : (rowTouch.has-hover ? Theme.icon-hover-bg : transparent);
                                 rowTouch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => { root.note-selected(note.id); }
@@ -106,21 +106,15 @@ export component VaultView inherits Rectangle {
                                     if note.image-count > 0:
                                         VerticalLayout {
                                             alignment: center;
-                                            Rectangle {
-                                                width: 26px;
-                                                height: 18px;
-                                                border-radius: 5px;
-                                                background: Theme.icon-hover-bg;
-                                                Text { text: note.image-count + ""; font-size: 11px; color: Theme.text-dim; horizontal-alignment: center; vertical-alignment: center; }
-                                            }
+                                            Text { text: note.image-count + ""; font-size: 11px; color: Theme.text-dim; }
                                         }
                                 }
                             }
                         if root.notes.length == 0:
                             Text {
-                                text: "No notes match this filter";
-                                color: Theme.text-faint;
-                                font-size: 12px;
+                                text: "No notes match";
+                                color: Theme.text-dim;
+                                font-size: 13px;
                                 horizontal-alignment: center;
                             }
                     }
@@ -186,7 +180,7 @@ export component VaultView inherits Rectangle {
                                 single-line: false;
                                 wrap: word-wrap;
                                 preferred-height: 460px;
-                                font-size: 14px;
+                                font-size: 13px;
                                 color: Theme.text;
                                 selection-background-color: Theme.accent-soft;
                                 edited => { root.source-edited(); }
@@ -198,7 +192,7 @@ export component VaultView inherits Rectangle {
                                 horizontal-stretch: 1;
                                 Text { text: "LINKS OUT"; font-size: 12px; font-weight: 500; letter-spacing: 0.48px; color: Theme.text-dim; }
                                 for link[i] in root.links-out:
-                                    TextButton { label: "[[" + link + "]]"; clicked => { root.link-clicked(link); } }
+                                    TextButton { label: link; clicked => { root.link-clicked(link); } }
                                 if root.links-out.length == 0:
                                     Text { text: "None yet"; font-size: 12px; color: Theme.text-faint; }
                             }

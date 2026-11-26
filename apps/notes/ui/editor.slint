@@ -42,6 +42,7 @@ export component EditorPane inherits Rectangle {
     in-out property <int> find-selection-offset: 0;
     in-out property <int> find-selection-length: 0;
     in-out property <int> find-selection-token: 0;
+    in-out property <int> find-item: -1;   // checklist row index highlighted by find
 
     // ---- in state ----
     in property <bool> compact: false;
@@ -300,6 +301,12 @@ export component EditorPane inherits Rectangle {
                             for item[i] in root.checklist-items:
                                 Rectangle {
                                     height: 40px;
+                                    border-radius: 8px;
+                                    // Web checklist find selects the match in the
+                                    // row input; Slint cannot reach into the for
+                                    // loop, so the row is highlighted with the
+                                    // web mark fill instead (focus stays put).
+                                    background: i == root.find-item ? Theme.mark-bg : transparent;
                                     HorizontalLayout {
                                         spacing: 10px;
                                         VerticalLayout { alignment: center; NoteCheckBox { checked: item.checked; toggled => { root.checklist-toggle-item(item.line); } } }

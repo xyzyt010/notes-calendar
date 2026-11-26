@@ -541,7 +541,7 @@ export component CardActions inherits HorizontalLayout {
     callback delete-forever();
     callback export-toggled();
 
-    spacing: 4px;
+    spacing: root.compact ? 3px : 4px;
     opacity: root.actions-visible ? 1.0 : 0.0;
     animate opacity { duration: 120ms; easing: ease-out; }
             if root.active-view == 4:
@@ -662,7 +662,7 @@ export component NoteCard inherits Rectangle {
     private property <bool> dragging: false;
 
     height: root.compact ? 68px : (root.fixed-height ? 170px : root.note.card-height);
-    border-radius: root.compact ? 8px : Theme.r-md;
+    border-radius: root.compact ? 8px : Theme.neo ? 14px : Theme.r-md;
     // Web parity: uncoloured notes have no fill (they read as the page);
     // coloured notes carry their fill and no border. The drag ghost adds
     // a fill back for the floating copy (see note-grid).
@@ -671,8 +671,8 @@ export component NoteCard inherits Rectangle {
     border-color: root.drag-active ? Theme.accent : (root.selected ? Theme.accent : (ta.has-hover ? Theme.border-strong : Theme.border));
     animate background { duration: 130ms; }
     animate border-color { duration: 130ms; }
-    drop-shadow-blur: root.drag-active ? 0px : (ta.has-hover ? 24px : (Theme.neo ? 26px : 12px));
-    drop-shadow-offset-y: root.drag-active ? 0px : (ta.has-hover ? 4px : (Theme.neo ? 8px : 2px));
+    drop-shadow-blur: root.drag-active ? 0px : Theme.neo ? 28px : (ta.has-hover ? 24px : 12px);
+    drop-shadow-offset-y: root.drag-active ? 0px : Theme.neo ? 10px : (ta.has-hover ? 4px : 2px);
     drop-shadow-color: Theme.neo ? #00000090 : #00000040;
     animate drop-shadow-blur { duration: 160ms; easing: ease-out; }
     animate drop-shadow-offset-y { duration: 160ms; easing: ease-out; }
@@ -1272,7 +1272,7 @@ export component EmptyState inherits VerticalLayout {
     in property <string> title;
     in property <string> subtitle: "";
     alignment: center;
-    spacing: 4px;
+    spacing: 8px;
 
     HorizontalLayout {
         alignment: center;
@@ -1285,16 +1285,15 @@ export component EmptyState inherits VerticalLayout {
     }
     Text {
         text: root.title;
-        font-size: 16px;
-        font-weight: 600;
+        font-size: 14px;
         color: Theme.text-dim;
         horizontal-alignment: center;
     }
     Text {
         visible: root.subtitle != "";
         text: root.subtitle;
-        font-size: 13px;
-        color: Theme.text-faint;
+        font-size: 14px;
+        color: Theme.text-dim;
         horizontal-alignment: center;
         wrap: word-wrap;
     }

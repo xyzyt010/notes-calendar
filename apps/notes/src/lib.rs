@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, Utc};
+use slint::Model;
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use uuid::Uuid;
 
@@ -1183,6 +1184,19 @@ fn set_find_selection(ui: &MainWindow, offset: usize, length: usize) {
     ui.set_find_selection_offset(offset as i32);
     ui.set_find_selection_length(length as i32);
     ui.set_find_selection_token(ui.get_find_selection_token() + 1);
+}
+
+/// Checklist find (web findInNote checklist branch): matches across task
+/// texts as (row index, byte offset) pairs.
+fn find_checklist_matches(ui: &MainWindow, query: &str) -> Vec<(i32, usize)> {
+    let items = ui.get_checklist_items();
+    let mut out = Vec::new();
+    for (i, it) in items.iter().enumerate() {
+        for start in find_matches(&it.text, query) {
+            out.push((i as i32, start));
+        }
+    }
+    out
 }
 
 fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
@@ -3397,28 +3411,20 @@ pub fn run_ui() -> anyhow::Result<()> {
     {
         let ui2 = ui.clone_strong();
         ui.on_find_changed(move || {
-            let body: String = ui2.get_editor_body().into();
             let query: String = ui2.get_editor_find_query().into();
-            let matches = find_matches(&body, &query);
-            let count = matches.len() as i32;
-            ui2.set_editor_find_count(count);
-            ui2.set_editor_find_index(0);
-            if let Some(offset) = matches.first().copied() {
-                set_find_selection(&ui2, offset, query.len());
-            }
-        });
-    }
-    {
-        let ui2 = ui.clone_strong();
-        ui.on_find_next(move || {
-            let body: String = ui2.get_editor_body().into();
-            let query: String = ui2.get_editor_find_query().into();
-            let matches = find_matches(&body, &query);
-            let count = matches.len() as i32;
-            if count > 0 {
-                let idx = (ui2.get_editor_find_index() + 1).rem_euclid(count);
-                ui2.set_editor_find_index(idx);
-                if let Some(offset) = matches.get(idx as usize).copied() {
+            if ui2.get_editor_checklist_mode() {
+                let matches = find_checklist_matches(&ui2, &query);
+                ui2.set_editor_find_count(matches.len() as i32);
+                ui2.set_editor_find_index(0);
+                ui2.set_editor_find_item(matches.first().map(|(i, _)| *i).unwrap_or(-1));
+            } else {
+                let body: String = ui2.get_editor_body().into();
+                let matches = find_matches(&body, &query);
+                let count = matches.len() as i32;
+                ui2.set_editor_find_count(count);
+                ui2.set_editor_find_index(0);
+                ui2.set_editor_find_item(-1);
+                if let Some(offset) = matches.first().copied() {
                     set_find_selection(&ui2, offset, query.len());
                 }
             }
@@ -3426,16 +3432,56 @@ pub fn run_ui() -> anyhow::Result<()> {
     }
     {
         let ui2 = ui.clone_strong();
-        ui.on_find_previous(move || {
-            let body: String = ui2.get_editor_body().into();
+        ui.on_find_next(move || {
             let query: String = ui2.get_editor_find_query().into();
-            let matches = find_matches(&body, &query);
-            let count = matches.len() as i32;
-            if count > 0 {
-                let idx = (ui2.get_editor_find_index() - 1).rem_euclid(count);
-                ui2.set_editor_find_index(idx);
-                if let Some(offset) = matches.get(idx as usize).copied() {
-                    set_find_selection(&ui2, offset, query.len());
+            if ui2.get_editor_checklist_mode() {
+                let matches = find_checklist_matches(&ui2, &query);
+                let count = matches.len() as i32;
+                if count > 0 {
+                    let idx = (ui2.get_editor_find_index() + 1).rem_euclid(count);
+                    ui2.set_editor_find_index(idx);
+                    if let Some((item, _)) = matches.get(idx as usize) {
+                        ui2.set_editor_find_item(*item);
+                    }
+                }
+            } else {
+                let body: String = ui2.get_editor_body().into();
+                let matches = find_matches(&body, &query);
+                let count = matches.len() as i32;
+                if count > 0 {
+                    let idx = (ui2.get_editor_find_index() + 1).rem_euclid(count);
+                    ui2.set_editor_find_index(idx);
+                    if let Some(offset) = matches.get(idx as usize).copied() {
+                        set_find_selection(&ui2, offset, query.len());
+                    }
+                }
+            }
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        ui.on_find_previous(move || {
+            let query: String = ui2.get_editor_find_query().into();
+            if ui2.get_editor_checklist_mode() {
+                let matches = find_checklist_matches(&ui2, &query);
+                let count = matches.len() as i32;
+                if count > 0 {
+                    let idx = (ui2.get_editor_find_index() - 1).rem_euclid(count);
+                    ui2.set_editor_find_index(idx);
+                    if let Some((item, _)) = matches.get(idx as usize) {
+                        ui2.set_editor_find_item(*item);
+                    }
+                }
+            } else {
+                let body: String = ui2.get_editor_body().into();
+                let matches = find_matches(&body, &query);
+                let count = matches.len() as i32;
+                if count > 0 {
+                    let idx = (ui2.get_editor_find_index() - 1).rem_euclid(count);
+                    ui2.set_editor_find_index(idx);
+                    if let Some(offset) = matches.get(idx as usize).copied() {
+                        set_find_selection(&ui2, offset, query.len());
+                    }
                 }
             }
         });
@@ -3447,6 +3493,7 @@ pub fn run_ui() -> anyhow::Result<()> {
             ui2.set_editor_find_query(SharedString::new());
             ui2.set_editor_find_count(0);
             ui2.set_editor_find_index(0);
+            ui2.set_editor_find_item(-1);
         });
     }
     {

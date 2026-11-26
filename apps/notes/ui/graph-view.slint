@@ -74,13 +74,15 @@ export component GraphView inherits Rectangle {
             fill: transparent;
         }
 
-    // nodes — painted far-to-near (Rust sorts), depth-dimmed for 3D parallax
+    // nodes — painted far-to-near (Rust sorts), depth-dimmed for 3D parallax.
+    // WebGL points are small dots; the visual disc is scaled down from the
+    // Rust hit radius so nodes read as dots with labels above a size floor.
     for node[i] in root.nodes:
         Rectangle {
-            x: node.x - node.radius;
-            y: node.y - node.radius;
-            width: node.radius * 2;
-            height: node.radius * 2;
+            x: node.x - max(4px, node.radius * 0.55);
+            y: node.y - max(4px, node.radius * 0.55);
+            width: max(8px, node.radius * 1.1);
+            height: max(8px, node.radius * 1.1);
             opacity: node.active ? 1.0 : 0.55 + node.depth * 0.45;
             border-radius: self.width / 2;
             background: node.active ? Theme.accent : (node.linked > 0 ? Theme.neo-raised : Theme.surface-3);
@@ -89,7 +91,7 @@ export component GraphView inherits Rectangle {
             drop-shadow-blur: node.active ? 18px : 8px;
             drop-shadow-color: node.active ? #AECBFA66 : #00000055;
             Text {
-                text: node.radius > 10px ? node.title : "";
+                text: node.radius > 16px ? node.title : "";
                 font-size: 10px;
                 font-weight: node.active ? 700 : 500;
                 color: node.active ? Theme.on-accent : Theme.text;

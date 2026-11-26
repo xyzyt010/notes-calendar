@@ -223,6 +223,7 @@ export component MainWindow inherits Window {
     in-out property <int> find-selection-offset: 0;
     in-out property <int> find-selection-length: 0;
     in-out property <int> find-selection-token: 0;
+    in-out property <int> editor-find-item: -1;
 
     // Composer state
     in-out property <bool> composer-open: false;
@@ -465,6 +466,18 @@ export component MainWindow inherits Window {
 
     callback refresh-masonry();
 
+    // Rail hover intent (web keep-app.js: pointerenter 130ms open,
+    // pointerleave 340ms close, unless pinned via sidebar-open).
+    in-out property <bool> rail-inside: false;
+    railOpenTimer := Timer {
+        interval: 130ms;
+        triggered => { if root.rail-inside { root.rail-hover = true; } }
+    }
+    railCloseTimer := Timer {
+        interval: 340ms;
+        triggered => { if !root.rail-inside { root.rail-hover = false; } }
+    }
+
     toastTimer := Timer {
         interval: 2.6s;
         running: root.toast-visible;
@@ -564,6 +577,7 @@ export component MainWindow inherits Window {
                                 height: root.compact ? 44px : 52px;
                                 SearchBar {
                                     width: 100%;
+                                    placeholder: root.active-view == 1 ? "Search pinned" : root.active-view == 3 ? "Search archived" : root.active-view == 4 ? "Search trash" : "Search your notes";
                                     text <=> root.search-text;
                                     focus-token <=> root.search-focus-token;
                                     submitted => { root.search-changed(root.search-text); }
@@ -618,7 +632,10 @@ export component MainWindow inherits Window {
                                 animate width { duration: 180ms; easing: ease-out; }
                                 background: Theme.drawer-bg;
                                 railTa := TouchArea {
-                                    changed has-hover => { root.rail-hover = self.has-hover; }
+                                    changed has-hover => {
+                                        root.rail-inside = self.has-hover;
+                                        if self.has-hover { railOpenTimer.restart(); } else { railCloseTimer.restart(); }
+                                    }
                                 }
                                 VerticalLayout {
                                     padding-left: root.sidebar-open || root.rail-hover ? 13px : 10px;
@@ -861,6 +878,7 @@ export component MainWindow inherits Window {
                                     find-selection-offset <=> root.find-selection-offset;
                                     find-selection-length <=> root.find-selection-length;
                                     find-selection-token <=> root.find-selection-token;
+                                    find-item <=> root.editor-find-item;
                                     in-trash: root.active-view == 4;
                                     in-archive: root.active-view == 3;
                                     folders: root.folders;

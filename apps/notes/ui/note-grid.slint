@@ -319,11 +319,10 @@ export component NoteListPanel inherits Rectangle {
                             : root.active-view == 3 ? "Nothing archived"
                             : root.active-view == 4 ? "Trash is empty"
                             : "Notes you add appear here";
-                        subtitle: root.search-text != "" ? "Try a different search, or create a new note."
+                        subtitle: (root.search-text != "" ? ""
                             : root.active-view == 1 ? "Pin a note from its card to keep it at the top of your board."
                             : root.active-view == 3 ? "Archive a note from its ⋮ menu to get it out of your board without deleting it."
-                            : root.active-view == 4 ? "Deleted notes stay here until you empty the trash."
-                            : "";
+                            : "");
                     }
             }
         }
