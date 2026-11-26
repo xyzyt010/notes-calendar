@@ -62,7 +62,11 @@ export component MarkdownGuide inherits Rectangle {
                     GuideRow { typed: "- [x] task"; seen: "Checked checklist item"; }
                     GuideRow { typed: "> quote"; seen: "Block quote"; }
                     GuideRow { typed: "[label](https://example.com)"; seen: "Clickable link"; }
+                    GuideRow { typed: "https://example.com"; seen: "Bare link (auto-linkified)"; }
+                    GuideRow { typed: "***both***"; seen: "Bold + italic"; }
+                    GuideRow { typed: "| A | B |"; seen: "Markdown table (header + rows)"; }
                     GuideRow { typed: "[[Meeting notes]]"; seen: "Link to another note + graph edge"; }
+                    GuideRow { typed: "![[image.png]]"; seen: "Wiki image embed"; }
                     GuideRow { typed: "---"; seen: "Horizontal rule"; }
                     GuideRow { typed: "![alt](image)"; seen: "Image (images attach as files)"; }
                     GuideRow { typed: "#tag"; seen: "Tag chips in the editor"; }
