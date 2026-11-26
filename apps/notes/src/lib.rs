@@ -443,7 +443,7 @@ fn board_drag_target(state: &Rc<RefCell<AppState>>, ui: &MainWindow, rel_x: f32,
     ui.set_drag_target_h(layout.heights[hl_idx]);
 }
 
-fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32, card_w: f32) -> f32 {
+fn estimate_card_height_px_d(title: &str, preview: &str, clamp_lines: i32, card_w: f32, density: &str, compact: bool) -> f32 {
     let title_cpl = ((card_w - 36.0) / 8.6).floor().max(16.0);
     let title_chars = title.chars().count();
     let title_lines = if title_chars == 0 {
@@ -472,7 +472,30 @@ fn estimate_card_height_px(title: &str, preview: &str, clamp_lines: i32, card_w:
     // plus title lines (23.1) and body lines (23; Slint line pitch at 12px/1.5
     // measures 21.6, +margin so the stretched Text never clips).
     // Verified: Meeting 162, Sprint 234.
-    (70.0 + title_lines as f32 * 23.0 + body_lines as f32 * 23.0).clamp(120.0, 1000.0)
+    // Density scales: compact/roomy/phone use the web tokens (pad, titles,
+    // body, actions all shrink/grow together).
+    let (base, pitch) = if compact {
+        (52.0f32, 17.0f32)
+    } else {
+        match density {
+            "compact" => (58.0, 19.0),
+            "roomy" => (86.0, 26.5),
+            _ => (70.0, 23.0),
+        }
+    };
+    (base + title_lines as f32 * pitch + body_lines as f32 * pitch).clamp(120.0, 1000.0)
+}
+
+/// Web --card-img per density (phone overrides to 110).
+fn card_image_height(density: &str, compact: bool) -> f32 {
+    if compact {
+        return 110.0;
+    }
+    match density {
+        "compact" => 120.0,
+        "roomy" => 240.0,
+        _ => 180.0,
+    }
 }
 
 fn editor_body_height_px(body: &str, width_px: f32) -> f32 {
@@ -837,7 +860,7 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         word_count: 0,
         color_index: color_index(&s.color),
         image_count: s.image_count as i32,
-        card_height: (estimate_card_height_px(title, preview, prefs.clamp, card_w) + checklist_extra + if s.image_count > 0 { 180.0 } else { 0.0 }).min(1000.0),
+        card_height: (estimate_card_height_px_d(title, preview, prefs.clamp, card_w, &prefs.density, false) + checklist_extra + if s.image_count > 0 { card_image_height(&prefs.density, false) } else { 0.0 }).min(1000.0),
         render_md: prefs.md_cards,
         preview_styled: styled_markdown(preview),
         preview_highlighted,
@@ -1179,7 +1202,7 @@ fn refresh_vault(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
             limit: 600,
         };
         let mut list = notes_store::list_notes_with_key(&s.db, &pool_filter, key.as_ref()).unwrap_or_default();
-        list.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+        list.sort_by_key(|a| a.title.to_lowercase());
         let prefs = s.prefs.clone();
         let vault_filter = ui.get_vault_filter().to_string().trim().to_lowercase();
         let data: Vec<NoteData> = list
@@ -1746,9 +1769,9 @@ fn toast(ui: &MainWindow, msg: &str) {
     ui.set_toast_visible(true);
 }
 
-fn note_entry(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str) -> (NoteData, f32) {
-    let height = estimate_card_height_px(&s.title, &s.preview, prefs.clamp, card_w)
-        + if s.image_count > 0 { 180.0 } else { 0.0 };
+fn note_entry_d(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str, compact: bool) -> (NoteData, f32) {
+    let height = estimate_card_height_px_d(&s.title, &s.preview, prefs.clamp, card_w, &prefs.density, compact)
+        + if s.image_count > 0 { card_image_height(&prefs.density, compact) } else { 0.0 };
     (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query), height)
 }
 
@@ -1831,11 +1854,11 @@ fn refresh_list(state: &Rc<RefCell<AppState>>, ui: &MainWindow) {
 
     let pinned_e: Vec<(NoteData, f32)> = pin_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, pin_item_w, &s.db, key.as_ref(), &s.search))
+        .map(|n| note_entry_d(n, &prefs, pin_item_w, &s.db, key.as_ref(), &s.search, compact))
         .collect();
     let others_e: Vec<(NoteData, f32)> = oth_summaries
         .iter()
-        .map(|n| note_entry(n, &prefs, oth_item_w, &s.db, key.as_ref(), &s.search))
+        .map(|n| note_entry_d(n, &prefs, oth_item_w, &s.db, key.as_ref(), &s.search, compact))
         .collect();
 
     // Uniform grid: pinned first, then others, in the order they should render.

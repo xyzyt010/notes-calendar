@@ -23,6 +23,105 @@ import { SettingsView } from "settings.slint";
 import { MarkdownGuide } from "markdown-guide.slint";
 import { DoodleOverlay } from "doodle.slint";
 
+// Drawer row set shared by the desktop rail and the compact overlay drawer.
+// Rows are the expanded (labels-first) set; the desktop rail adds icon-only
+// RailRows around this same content.
+component DrawerMenu inherits VerticalLayout {
+    in-out property <int> active-view: 0;
+    in-out property <string> active-folder: "";
+    in-out property <string> active-tag: "";
+    in-out property <int> layout-style: 0;
+    in-out property <bool> dark: true;
+    in-out property <int> live-count: 0;
+    in-out property <int> pinned-count: 0;
+    in-out property <int> archive-count: 0;
+    in-out property <int> trash-count: 0;
+    in-out property <[FolderData]> folders: [];
+    in-out property <[TagData]> tags: [];
+    in-out property <bool> new-folder-open: false;
+    in-out property <string> new-folder-name: "";
+
+    callback view-selected(int);
+    callback layout-selected(int);
+    callback toggle-theme();
+    callback new-folder();
+    callback create-folder(string);
+    callback cancel-new-folder();
+    callback folder-selected(string);
+    callback delete-folder(string);
+    callback tag-selected(string);
+    callback empty-trash-requested();
+    callback settings-requested();
+
+    spacing: 2px;
+    Text { text: "Notes"; font-size: 13px; color: Theme.text-dim; horizontal-stretch: 1; height: 28px; vertical-alignment: center; wrap: no-wrap; overflow: elide; }
+    SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.live-count == 0 ? "" : root.live-count + ""; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: root.pinned-count == 0 ? "" : root.pinned-count + ""; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: root.archive-count == 0 ? "" : root.archive-count + ""; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: root.trash-count == 0 ? "" : root.trash-count + ""; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    Rectangle { height: 8px; }
+    if root.active-view == 4:
+        SidebarRow { labels: true; label: "Empty trash"; meta: ""; clicked => { root.empty-trash-requested(); } IconEmptyTrash { stroke-color: Theme.danger; preferred-width: 20px; preferred-height: 20px; } }
+    Rectangle { height: 8px; }
+    SidebarRow { labels: true; label: "Settings"; meta: ""; clicked => { root.settings-requested(); } IconSettings { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    Divider {}
+    SidebarRow { labels: true; selected: root.active-view == 2; label: "Favorites"; meta: ""; clicked => { root.view-selected(2); } IconStar { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; selected: root.layout-style == 2; label: "Vault"; meta: ""; clicked => { root.layout-selected(2); } IconPanelLeft { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; selected: root.layout-style == 4; label: "Graph"; meta: ""; clicked => { root.layout-selected(4); } IconLink2 { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+    SidebarRow { labels: true; label: root.dark ? "Light" : "Dark"; meta: ""; clicked => { root.toggle-theme(); } IconMoon { stroke-color: Theme.text-dim; preferred-width: 20px; preferred-height: 20px; } }
+    Rectangle { height: 14px; }
+    HorizontalLayout {
+        padding-left: 8px;
+        height: 30px;
+        Text { text: "FOLDERS"; font-size: 12px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; horizontal-stretch: 1; }
+        IconButton { size: 28px; clicked => { root.new-folder(); } IconFolderPlus { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; } }
+    }
+    if root.new-folder-open:
+        Rectangle {
+            height: 38px;
+            border-radius: Theme.r-md;
+            background: Theme.surface-2;
+            TextInput {
+                x: 12px; width: parent.width - 24px; height: 100%; single-line: true;
+                font-size: 13.5px; color: Theme.text; vertical-alignment: center; text <=> root.new-folder-name;
+                selection-background-color: Theme.accent-soft;
+                key-pressed(event) => {
+                    if event.text == "\n" { root.create-folder(self.text); return accept; }
+                    if event.text == "\u{1b}" { root.cancel-new-folder(); return accept; }
+                    reject
+                }
+            }
+        }
+    for folder[fi] in root.folders:
+        SidebarRow {
+            labels: true;
+            label: folder.name;
+            meta: folder.meta;
+            selected: root.active-folder == folder.id;
+            show-delete: true;
+            clicked => { root.folder-selected(folder.id); }
+            delete => { root.delete-folder(folder.id); }
+            IconFolder { stroke-color: Theme.icon; preferred-width: 19px; preferred-height: 19px; }
+        }
+    Rectangle { height: 14px; }
+    HorizontalLayout {
+        padding-left: 8px;
+        height: 30px;
+        Text { text: "TAGS"; font-size: 12px; font-weight: 700; letter-spacing: 1.1px; color: Theme.text-faint; vertical-alignment: center; }
+    }
+    for tag[ti] in root.tags:
+        SidebarRow {
+            labels: true;
+            label: "#  " + tag.name;
+            meta: tag.meta;
+            selected: root.active-tag == tag.name;
+            clicked => { root.tag-selected(tag.name); }
+            IconTag { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+        }
+    Divider {}
+    Rectangle { height: 8px; }
+    SidebarRow { labels: true; label: "Layout: " + (root.layout-style == 1 ? "Notion" : root.layout-style == 2 ? "Obsidian" : root.layout-style == 3 ? "Neomorph" : root.layout-style == 4 ? "3D graph" : "Keep"); meta: ""; clicked => { root.layout-selected(root.layout-style == 4 ? 0 : root.layout-style + 1); } IconLayoutGrid { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
+}
 
 export component MainWindow inherits Window {
     title: "Notes";
@@ -1410,6 +1509,62 @@ export component MainWindow inherits Window {
                             x: 40px; y: parent.height - 62px; width: parent.width - 80px; height: 30px;
                             Text { text: root.image-preview-name + "  ·  " + root.image-preview-size; font-size: 12px; color: #e8eaed; vertical-alignment: center; horizontal-stretch: 1; }
                             TextButton { label: "Download"; emphasis: true; clicked => { root.image-download-preview(); } }
+                        }
+                    }
+
+                // Compact (phone) drawer: overlay panel + scrim, like web
+                // `.drawer { width: min(280px, 80vw); top: 56px }` + `.drawer-scrim`.
+                if root.compact && root.sidebar-open:
+                    Rectangle {
+                        x: 0px; y: 56px; width: 100%; height: 100%;
+                        // Web .drawer-scrim is a transparent click-catcher.
+                        background: transparent;
+                        TouchArea { clicked => { root.sidebar-open = false; } }
+                    }
+                    Rectangle {
+                        x: 0px; y: 56px;
+                        width: min(280px, parent.width - parent.width / 5);
+                        height: parent.height - 56px;
+                        background: Theme.drawer-bg;
+                        clip: true;
+                        VerticalLayout {
+                            padding-left: 13px;
+                            padding-right: 14px;
+                            padding-top: 12px;
+                            padding-bottom: 10px;
+                            Flickable {
+                                vertical-stretch: 1;
+                                content-width: self.width;
+                                content-height: menu.preferred-height;
+                                menu := DrawerMenu {
+                                    y: 0px;
+                                    width: parent.width;
+                                    active-view: root.active-view;
+                                    active-folder: root.active-folder;
+                                    active-tag: root.active-tag;
+                                    layout-style: root.layout-style;
+                                    dark: root.dark;
+                                    live-count: root.drawer-live-count;
+                                    pinned-count: root.drawer-pinned-count;
+                                    archive-count: root.drawer-archive-count;
+                                    trash-count: root.drawer-trash-count;
+                                    folders: root.folders;
+                                    tags: root.tags;
+                                    new-folder-open <=> root.new-folder-open;
+                                    new-folder-name <=> root.new-folder-name;
+                                    view-selected(v) => { root.sidebar-open = false; root.view-selected(v); }
+                                    layout-selected(v) => { root.sidebar-open = false; root.layout-selected(v); }
+                                    toggle-theme() => { root.sidebar-open = false; root.toggle-theme(); }
+                                    new-folder() => { root.new-folder(); }
+                                    create-folder(n) => { root.create-folder(n); }
+                                    cancel-new-folder() => { root.cancel-new-folder(); }
+                                    folder-selected(id) => { root.sidebar-open = false; root.folder-selected(id); }
+                                    delete-folder(id) => { root.delete-folder(id); }
+                                    tag-selected(n) => { root.sidebar-open = false; root.tag-selected(n); }
+                                    empty-trash-requested() => { root.sidebar-open = false; root.show-empty-trash = true; }
+                                    settings-requested() => { root.sidebar-open = false; root.show-settings = true; }
+                                }
+                            }
                         }
                     }
 

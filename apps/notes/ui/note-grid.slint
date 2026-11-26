@@ -206,6 +206,7 @@ export component NoteListPanel inherits Rectangle {
                         animate x { duration: 190ms; easing: ease-out; }
                         animate y { duration: 190ms; easing: ease-out; }
                         compact: root.list-view || root.layout-style == 1;
+                        density: root.density;
                         preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;
                         show-date: root.show-dates;
                         active-view: root.active-view;
@@ -260,6 +261,7 @@ export component NoteListPanel inherits Rectangle {
                         animate x { duration: 190ms; easing: ease-out; }
                         animate y { duration: 190ms; easing: ease-out; }
                         compact: root.list-view || root.layout-style == 1;
+                        density: root.density;
                         preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;
                         show-date: root.show-dates;
                         active-view: root.active-view;

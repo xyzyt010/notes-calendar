@@ -527,6 +527,10 @@ export component Input inherits Rectangle {
 export component CardActions inherits HorizontalLayout {
     in property <int> active-view: 0;
     in property <bool> pinned: false;
+    in property <int> density: 1;   // web --card-act: 28/32/36, phone 30
+    in property <bool> compact: false;
+    private property <length> act-size: root.compact ? 30px : root.density == 0 ? 28px : root.density == 2 ? 36px : 32px;
+    private property <length> act-ico: root.compact ? 16px : root.density == 0 ? 16px : root.density == 2 ? 18px : 17px;
     in-out property <bool> actions-visible: true;
     in-out property <bool> color-open: false;
     in-out property <bool> more-open: false;
@@ -544,72 +548,72 @@ export component CardActions inherits HorizontalLayout {
                 HorizontalLayout {
                     spacing: 4px;
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.restore-toggled(); } }
-                        IconRestore { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconRestore { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         danger: true;
                         clicked => { if root.actions-visible { root.delete-forever(); } }
-                        IconTrash { stroke-color: Theme.danger; preferred-width: 17px; preferred-height: 17px; }
+                        IconTrash { stroke-color: Theme.danger; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                 }
             if root.active-view == 3:
                 HorizontalLayout {
                     spacing: 4px;
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.archive-toggled(); } }
-                        IconArchiveArrowUp { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconArchiveArrowUp { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.more-open = false; root.color-open = !root.color-open; } }
-                        IconPalette { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconPalette { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.export-toggled(); } }
-                        IconDownload { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconDownload { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.trash-toggled(); } }
-                        IconTrash { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconTrash { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                 }
             if root.active-view != 3 && root.active-view != 4:
                 HorizontalLayout {
                     spacing: 4px;
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.pin-toggled(); } }
                         if root.pinned:
-                            IconPinFilled { stroke-color: Theme.text; preferred-width: 17px; preferred-height: 17px; }
+                            IconPinFilled { stroke-color: Theme.text; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                         if !root.pinned:
-                            IconPin { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                            IconPin { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.more-open = false; root.color-open = !root.color-open; } }
-                        IconPalette { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconPalette { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.archive-toggled(); } }
-                        IconArchive { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconArchive { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                     IconButton {
-                        size: 32px;
+                        size: root.act-size;
                         clicked => { if root.actions-visible { root.trash-toggled(); } }
-                        IconTrash { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                        IconTrash { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
                     }
                 }
             IconButton {
-                size: 32px;
+                size: root.act-size;
                 clicked => { if root.actions-visible { root.color-open = false; root.more-open = !root.more-open; } }
-                IconMoreVert { stroke-color: Theme.icon; preferred-width: 17px; preferred-height: 17px; }
+                IconMoreVert { stroke-color: Theme.icon; preferred-width: root.act-ico; preferred-height: root.act-ico; }
             }
 }
 
@@ -617,6 +621,7 @@ export component CardActions inherits HorizontalLayout {
 export component NoteCard inherits Rectangle {
     in property <NoteData> note;
     in property <bool> compact: false;
+    in property <int> density: 1;   // web body[data-density]: 0 compact · 1 cozy · 2 roomy
     in property <int> preview-lines: 5;
     in property <bool> show-date: true;
     in property <int> active-view: 0;   // 0 all · 1 pinned · 2 fav · 3 archive · 4 trash
@@ -639,6 +644,15 @@ export component NoteCard inherits Rectangle {
     callback drag-move(length, length);
     callback drag-finish(length, length);
 
+    // Web density tokens (--card-pad/--card-title/--card-body/--card-check).
+    // Phones override all densities (web @720px block).
+    private property <length> tok-pad-x: root.compact ? 13px : root.density == 0 ? 12px : root.density == 2 ? 22px : 18px;
+    private property <length> tok-pad-t: root.compact ? 11px : root.density == 0 ? 10px : root.density == 2 ? 18px : 14px;
+    private property <length> tok-pad-b: root.compact ? 7px : root.density == 0 ? 6px : root.density == 2 ? 13px : 10px;
+    private property <length> tok-title: root.compact ? 14.5px : root.density == 0 ? 14px : root.density == 2 ? 18.5px : 16.5px;
+    private property <length> tok-body: root.compact ? 11px : root.density == 0 ? 11px : root.density == 2 ? 13.5px : 12px;
+    private property <length> tok-check: root.compact ? 14px : root.density == 0 ? 13px : root.density == 2 ? 17px : 15px;
+    private property <length> tok-img: root.compact ? 110px : root.density == 0 ? 120px : root.density == 2 ? 240px : 180px;
     private property <bool> pressed: false;
     private property <bool> suppress-click: false;
     private property <bool> color-open: false;
@@ -712,13 +726,13 @@ export component NoteCard inherits Rectangle {
 
     VerticalLayout {
         visible: !root.compact;
-        y: (!root.compact && root.note.images.length > 0) ? 180px : 0px;
+        y: (!root.compact && root.note.images.length > 0) ? root.tok-img : 0px;
         width: 100%;
-        height: (!root.compact && root.note.images.length > 0) ? root.height - 180px : root.height;
-        padding-left: root.compact ? 12px : 18px;
-        padding-right: root.compact ? 12px : 18px;
-        padding-top: root.compact ? 8px : 14px;
-        padding-bottom: root.compact ? 6px : 10px;
+        height: (!root.compact && root.note.images.length > 0) ? root.height - root.tok-img : root.height;
+        padding-left: root.compact ? 12px : root.tok-pad-x;
+        padding-right: root.compact ? 12px : root.tok-pad-x;
+        padding-top: root.compact ? 8px : root.tok-pad-t;
+        padding-bottom: root.compact ? 6px : root.tok-pad-b;
         spacing: root.compact ? 4px : 6px;
 
         // Title row: web shows only a solid pin badge top-right for pinned
@@ -733,7 +747,7 @@ export component NoteCard inherits Rectangle {
                     horizontal-stretch: 1;
                     source-text: root.note.title;
                     marks: root.note.title-marks;
-                    font-size: 16.5px;
+                    font-size: root.tok-title;
                     font-weight: 500;
                     wrap-words: !root.compact;
                     line-height: 1.4;
@@ -745,7 +759,7 @@ export component NoteCard inherits Rectangle {
                 Text {
                     horizontal-stretch: 1;
                     text: root.note.title == "" ? "Untitled" : root.note.title;
-                    font-size: 16.5px;
+                    font-size: root.tok-title;
                     font-weight: 500;
                     line-height-factor: 1.4;
                     color: root.note.title == "" ? Theme.text-faint : Theme.card-title-ink;
@@ -771,7 +785,7 @@ export component NoteCard inherits Rectangle {
                 vertical-stretch: root.compact ? 0 : 1;
                 source-text: root.note.preview;
                 marks: root.note.preview-marks;
-                font-size: 12px;
+                font-size: root.tok-body;
                 font-weight: 400;
                 wrap-words: !root.compact;
                 line-height: 1.5;
@@ -781,7 +795,7 @@ export component NoteCard inherits Rectangle {
         if !root.note.is-checklist && root.note.render-md && !root.note.preview-highlighted:
             StyledText {
                 text: root.note.preview-styled;
-                default-font-size: 12px;
+                default-font-size: root.tok-body;
                 default-color: Theme.card-body-ink;
                 link-color: Theme.accent;
                 max-lines: root.preview-lines <= 0 ? 0 : root.preview-lines;
@@ -796,11 +810,11 @@ export component NoteCard inherits Rectangle {
                             spacing: 6px;
                             VerticalLayout {
                                 padding-top: 2px;
-                                NoteCheckBox { box-size: 15px; checked: item.checked; toggled => { root.checklist-item-toggled(item.line); } }
+                                NoteCheckBox { box-size: root.tok-check; checked: item.checked; toggled => { root.checklist-item-toggled(item.line); } }
                             }
                             Text {
                                 text: item.text;
-                                font-size: 12px;
+                                font-size: root.tok-body;
                                 font-weight: 400;
                                 line-height-factor: 1.5;
                                 color: item.checked ? Theme.text-faint : Theme.card-body-ink;
@@ -819,7 +833,7 @@ export component NoteCard inherits Rectangle {
                 // layout compress it and Slint elided the last line mid-word).
                 vertical-stretch: root.compact ? 0 : 1;
                 text: root.note.preview;
-                font-size: 12px;
+                font-size: root.tok-body;
                 font-weight: 400;
                 line-height-factor: 1.5;
                 color: Theme.card-body-ink;
@@ -873,6 +887,8 @@ export component NoteCard inherits Rectangle {
                 CardActions {
                     active-view: root.active-view;
                     pinned: root.note.pinned;
+                    density: root.density;
+                    compact: root.compact;
                     actions-visible: ta.has-hover || root.color-open || root.more-open;
                     color-open <=> root.color-open;
                     more-open <=> root.more-open;
@@ -889,6 +905,8 @@ export component NoteCard inherits Rectangle {
             CardActions {
                 active-view: root.active-view;
                 pinned: root.note.pinned;
+                density: root.density;
+                compact: root.compact;
                 actions-visible: ta.has-hover || root.color-open || root.more-open;
                 color-open <=> root.color-open;
                 more-open <=> root.more-open;
@@ -964,6 +982,8 @@ export component NoteCard inherits Rectangle {
                 CardActions {
                     active-view: root.active-view;
                     pinned: root.note.pinned;
+                    density: root.density;
+                    compact: root.compact;
                     actions-visible: ta.has-hover || root.color-open || root.more-open;
                     color-open <=> root.color-open;
                     more-open <=> root.more-open;
@@ -985,7 +1005,7 @@ export component NoteCard inherits Rectangle {
             x: 0px;
             y: 0px;
             width: 100%;
-            height: 180px;
+            height: root.tok-img;
             clip: true;
             border-radius: Theme.r-md;
             background: Theme.surface-2;
