@@ -3348,7 +3348,6 @@ pub fn run_ui() -> anyhow::Result<()> {
         });
     }
     {
-        let ui2 = ui.clone_strong();
         let st = state.clone();
         ui.on_image_download(move |id| {
             let Ok(nid) = Uuid::parse_str(&id) else { return };
