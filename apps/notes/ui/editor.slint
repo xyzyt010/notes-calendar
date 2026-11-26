@@ -68,6 +68,7 @@ export component EditorPane inherits Rectangle {
     callback image-requested();
     callback draw-requested();
     callback image-preview(string);
+    callback image-download(string);
     callback image-delete(string);
     callback checklist-toggle();
     callback checklist-add(string);
@@ -138,8 +139,8 @@ export component EditorPane inherits Rectangle {
                     height: root.find-open ? 38px : 0px;
                     opacity: root.find-open ? 1.0 : 0.0;
                     clip: true;
-                    animate height { duration: 150ms; easing: ease-out; }
-                    animate opacity { duration: 150ms; easing: ease-out; }
+                    animate height { duration: 150ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+                    animate opacity { duration: 150ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                 Rectangle {
                     height: 38px;
                     border-radius: 8px;
@@ -214,6 +215,13 @@ export component EditorPane inherits Rectangle {
                                     height: 100%;
                                     mouse-cursor: pointer;
                                     clicked => { root.image-preview(image.id); }
+                                }
+                                IconButton {
+                                    x: parent.width - 59px;
+                                    y: 3px;
+                                    size: 22px;
+                                    clicked => { root.image-download(image.id); }
+                                    IconDownload { stroke-color: #ffffff; preferred-width: 12px; preferred-height: 12px; }
                                 }
                                 IconButton {
                                     x: parent.width - 25px;

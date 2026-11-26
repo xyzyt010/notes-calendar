@@ -203,8 +203,8 @@ export component NoteListPanel inherits Rectangle {
                         x: root.layout-style == 1 ? root.row-x : root.board-lefts[i];
                         width: root.layout-style == 1 ? root.row-w : root.pin-w;
                         y: root.composer-space + root.board-tops[i];
-                        animate x { duration: 190ms; easing: ease-out; }
-                        animate y { duration: 190ms; easing: ease-out; }
+                        animate x { duration: 190ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+                        animate y { duration: 190ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                         compact: root.list-view || root.layout-style == 1;
                         density: root.density;
                         preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;
@@ -258,8 +258,8 @@ export component NoteListPanel inherits Rectangle {
                         x: root.layout-style == 1 ? root.row-x : root.board-lefts[root.pin-count + i];
                         width: root.layout-style == 1 ? root.row-w : root.notes-w;
                         y: root.composer-space + root.board-tops[root.pin-count + i];
-                        animate x { duration: 190ms; easing: ease-out; }
-                        animate y { duration: 190ms; easing: ease-out; }
+                        animate x { duration: 190ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+                        animate y { duration: 190ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                         compact: root.list-view || root.layout-style == 1;
                         density: root.density;
                         preview-lines: root.list-view || root.layout-style == 1 ? 1 : root.preview-lines;

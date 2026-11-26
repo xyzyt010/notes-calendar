@@ -3350,6 +3350,17 @@ pub fn run_ui() -> anyhow::Result<()> {
     {
         let ui2 = ui.clone_strong();
         let st = state.clone();
+        ui.on_image_download(move |id| {
+            let Ok(nid) = Uuid::parse_str(&id) else { return };
+            let s = st.borrow();
+            let Some(image) = notes_store::get_image(&s.db, nid, s.vault_key.as_ref()).ok().flatten() else { return };
+            let Some(path) = rfd::FileDialog::new().set_file_name(&image.meta.name).save_file() else { return };
+            let _ = std::fs::write(path, image.bytes);
+        });
+    }
+    {
+        let ui2 = ui.clone_strong();
+        let st = state.clone();
         ui.on_image_download_preview(move || {
             let id = ui2.get_image_preview_id().to_string();
             let Ok(nid) = Uuid::parse_str(&id) else { return };

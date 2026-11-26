@@ -376,6 +376,7 @@ export component MainWindow inherits Window {
     callback draw-editor();
     callback image-preview(string);
     callback image-delete(string);
+    callback image-download(string);
     callback image-download-preview();
     callback close-image-preview();
     callback checklist-toggle();
@@ -632,7 +633,7 @@ export component MainWindow inherits Window {
                                 width: root.sidebar-open || root.rail-hover ? 280px : 64px;
                                 height: root.height - 64px;
                                 vertical-stretch: 1;
-                                animate width { duration: 180ms; easing: ease-out; }
+                                animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                                 background: Theme.drawer-bg;
                                 railTa := TouchArea {
                                     changed has-hover => {
@@ -903,6 +904,7 @@ export component MainWindow inherits Window {
                                     draw-requested => { root.draw-editor(); }
                                     image-preview(id) => { root.image-preview(id); }
                                     image-delete(id) => { root.image-delete(id); }
+                                    image-download(id) => { root.image-download(id); }
                                     checklist-toggle => { root.checklist-toggle(); }
                                     checklist-add(text) => { root.checklist-add(text); }
                                     checklist-toggle-item(line) => { root.checklist-toggle-item(line); }
@@ -1055,7 +1057,7 @@ export component MainWindow inherits Window {
                                 width: 100%; height: 100%;
                                 visible: root.modal-showing;
                                 opacity: root.has-note ? 1.0 : 0.0;
-                                animate opacity { duration: 180ms; easing: ease-out; }
+                                animate opacity { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                                 background: Theme.scrim;
                                 TouchArea { enabled: root.has-note; clicked => { root.back-to-list(); } }
                                 modalCard := Rectangle {
@@ -1118,6 +1120,7 @@ export component MainWindow inherits Window {
                                             draw-requested => { root.draw-editor(); }
                                             image-preview(id) => { root.image-preview(id); }
                                             image-delete(id) => { root.image-delete(id); }
+                                    image-download(id) => { root.image-download(id); }
                                             checklist-toggle => { root.checklist-toggle(); }
                                             checklist-add(text) => { root.checklist-add(text); }
                                             checklist-toggle-item(line) => { root.checklist-toggle-item(line); }
