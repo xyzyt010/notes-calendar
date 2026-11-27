@@ -170,6 +170,10 @@ export component MainWindow inherits Window {
     in-out property <int> grid-cols: 4;
     in-out property <bool> rail-hover: false;
     in-out property <bool> sidebar-open: false;
+    in-out property <bool> rail-expanded: root.sidebar-open || root.rail-hover;
+    // Drawer width is a plain length so absolute content positioning can follow
+    // the animated rail width without a layout solver calculation.
+    in-out property <length> drawer-width: 64px;
     in-out property <bool> compact: false;
     in-out property <bool> pinned-section: false;
     in-out property <string> selected-folder-of-editor: "";
@@ -456,10 +460,22 @@ export component MainWindow inherits Window {
         }
     }
     changed grid-cols => { root.refresh-masonry(); }
+    changed drawer-width => {
+        if root.density-setting == 0 {
+            root.grid-cols = root.compact ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) <= 720px ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) < 1250px ? 3 : (self.width - self.drawer-width) < 1650px ? 4 : 5;
+        } else if root.density-setting == 2 {
+            root.grid-cols = root.compact ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) <= 720px ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) < 1100px ? 1 : (self.width - self.drawer-width) < 1500px ? 2 : 3;
+        } else {
+            root.grid-cols = root.compact ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) <= 720px ? (root.mobile-two ? 2 : 1) : (self.width - self.drawer-width) < 1250px ? 3 : (self.width - self.drawer-width) < 1650px ? 4 : 5;
+        }
+    }
     changed dark => { Theme.dark = root.dark; }
     changed neo => { Theme.neo = root.neo; }
     changed has-note => {
         if root.has-note && !root.compact { root.modal-showing = true; }
+    }
+    changed rail-expanded => {
+        if !root.compact { root.drawer-width = root.rail-expanded ? 280px : 64px; }
     }
 
     modalHideTimer := Timer {
@@ -623,18 +639,21 @@ export component MainWindow inherits Window {
                         }
 
                     // ===== MAIN ROW (webapp parity: sidebar | content) =====
-                    mainRow := HorizontalLayout {
+                    // Explicit geometry keeps the content region synchronized with
+                    // the animated drawer width.
+                    mainRow := Rectangle {
                         vertical-stretch: 1;
-                        spacing: 0px;
+                        background: transparent;
 
                         // ---- icon rail (webapp parity): 64px icons, expands to 280px on hover/pin ----
-                        if !root.compact:
-                            sidebar := Rectangle {
-                                width: root.sidebar-open || root.rail-hover ? 280px : 64px;
-                                height: root.height - 64px;
-                                vertical-stretch: 1;
-                                animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
-                                background: Theme.drawer-bg;
+                        sidebar := Rectangle {
+                            visible: !root.compact;
+                            x: 0px;
+                            y: 0px;
+                            width: root.drawer-width;
+                            height: 100%;
+                            animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+                            background: Theme.drawer-bg;
                                 railTa := TouchArea {
                                     changed has-hover => {
                                         root.rail-inside = self.has-hover;
@@ -642,14 +661,14 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 VerticalLayout {
-                                    padding-left: root.sidebar-open || root.rail-hover ? 13px : 10px;
-                                    padding-right: root.sidebar-open || root.rail-hover ? 14px : 10px;
-                                    padding-top: root.sidebar-open || root.rail-hover ? 12px : 6px;
+                                    padding-left: root.rail-expanded ? 13px : 10px;
+                                    padding-right: root.rail-expanded ? 14px : 10px;
+                                    padding-top: root.rail-expanded ? 12px : 6px;
                                     padding-bottom: 10px;
                                     spacing: 2px;
 
                                     // drawer head (web shows the signed-in user; local app shows product name)
-                                    if root.sidebar-open || root.rail-hover:
+                                    if root.rail-expanded:
                                         Text { text: "Notes"; font-size: 13px; color: Theme.text-dim; horizontal-stretch: 1; height: 28px; vertical-alignment: center; wrap: no-wrap; overflow: elide; }
 
                                     sideScroll := Flickable {
@@ -659,39 +678,39 @@ export component MainWindow inherits Window {
 
                                         sideColumn := VerticalLayout {
                                             spacing: 2px;
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 SidebarRow { labels: true; selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; label: "Notes"; meta: root.drawer-live-count == 0 ? "" : root.drawer-live-count + ""; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                            if !(root.sidebar-open || root.rail-hover):
+                                            if !(root.rail-expanded):
                                                 RailRow { selected: root.active-view == 0 && root.active-folder == "" && root.active-tag == "" && root.layout-style != 4 && root.layout-style != 2; clicked => { root.view-selected(0); } IconBrand { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 SidebarRow { labels: true; selected: root.active-view == 1; label: "Pinned"; meta: root.drawer-pinned-count == 0 ? "" : root.drawer-pinned-count + ""; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                            if !(root.sidebar-open || root.rail-hover):
+                                            if !(root.rail-expanded):
                                                 RailRow { selected: root.active-view == 1; clicked => { root.view-selected(1); } IconPin { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 SidebarRow { labels: true; selected: root.active-view == 3; label: "Archived"; meta: root.drawer-archive-count == 0 ? "" : root.drawer-archive-count + ""; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                            if !(root.sidebar-open || root.rail-hover):
+                                            if !(root.rail-expanded):
                                                 RailRow { selected: root.active-view == 3; clicked => { root.view-selected(3); } IconArchive { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 SidebarRow { labels: true; selected: root.active-view == 4; label: "Trash"; meta: root.drawer-trash-count == 0 ? "" : root.drawer-trash-count + ""; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                            if !(root.sidebar-open || root.rail-hover):
+                                            if !(root.rail-expanded):
                                                 RailRow { selected: root.active-view == 4; clicked => { root.view-selected(4); } IconTrash { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             // web .drawer-sep spacing
                                             Rectangle { height: 8px; }
                                             if root.active-view == 4:
                                                 trashWrap := VerticalLayout {
                                                     spacing: 2px;
-                                                    if root.sidebar-open || root.rail-hover:
+                                                    if root.rail-expanded:
                                                         SidebarRow { labels: true; label: "Empty trash"; meta: ""; clicked => { root.show-empty-trash = true; } IconEmptyTrash { stroke-color: Theme.danger; preferred-width: 20px; preferred-height: 20px; } }
-                                                    if !(root.sidebar-open || root.rail-hover):
+                                                    if !(root.rail-expanded):
                                                         RailRow { danger: true; clicked => { root.show-empty-trash = true; } IconEmptyTrash { stroke-color: Theme.danger; preferred-width: 22px; preferred-height: 22px; } }
                                                 }
                                             Rectangle { height: 8px; }
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 SidebarRow { labels: true; label: "Settings"; meta: ""; clicked => { root.show-settings = true; } IconSettings { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                            if !(root.sidebar-open || root.rail-hover):
+                                            if !(root.rail-expanded):
                                                 RailRow { clicked => { root.show-settings = true; } IconSettings { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                             // ---- extras below the web drawer items (expanded only) ----
-                                            if root.sidebar-open || root.rail-hover:
+                                            if root.rail-expanded:
                                                 extras := VerticalLayout {
                                                     spacing: 2px;
                                                     Divider {}
@@ -753,19 +772,22 @@ export component MainWindow inherits Window {
                                     }
                                     Divider {}
                                     Rectangle { height: 8px; }
-                                    if root.sidebar-open || root.rail-hover:
+                                    if root.rail-expanded:
                                         SidebarRow { labels: true; label: "Layout: " + (root.layout-style == 1 ? "Notion" : root.layout-style == 2 ? "Obsidian" : root.layout-style == 3 ? "Neomorph" : root.layout-style == 4 ? "3D graph" : "Keep"); meta: ""; clicked => { root.layout-selected(root.layout-style == 4 ? 0 : root.layout-style + 1); } IconLayoutGrid { stroke-color: Theme.icon; preferred-width: 20px; preferred-height: 20px; } }
-                                    if !(root.sidebar-open || root.rail-hover):
+                                    if !(root.rail-expanded):
                                         RailRow { clicked => { root.layout-selected(root.layout-style == 4 ? 0 : root.layout-style + 1); } IconLayoutGrid { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; } }
                                 }
-                                Rectangle { x: parent.width - 1px; width: 1px; height: 100%; background: Theme.divider; visible: root.sidebar-open || root.rail-hover; }
+                                Rectangle { x: parent.width - 1px; width: 1px; height: 100%; background: Theme.divider; visible: root.rail-expanded; }
                             }
 
                         // ---- content region ----
                         contentRegion := Rectangle {
-                            horizontal-stretch: 1;
-                            height: root.height - 64px;
-                            vertical-stretch: 1;
+                            x: root.compact ? 0px : root.drawer-width;
+                            y: 0px;
+                            width: parent.width - (root.compact ? 0px : root.drawer-width);
+                            height: 100%;
+                            animate x { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+                            animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                             background: Theme.bg;
                             clip: true;
 
@@ -1004,6 +1026,7 @@ export component MainWindow inherits Window {
 
                             if root.layout-style == 2:
                                 VaultView {
+                                    width: 100%;
                                     horizontal-stretch: 1;
                                     height: root.height - 64px;
                                     filter <=> root.vault-filter;
@@ -1031,6 +1054,7 @@ export component MainWindow inherits Window {
 
                             if root.layout-style == 4:
                                 GraphView {
+                                    width: 100%;
                                     horizontal-stretch: 1;
                                     height: root.height - 64px;
                                     nodes: root.graph-nodes;
