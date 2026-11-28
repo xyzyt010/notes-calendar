@@ -324,12 +324,11 @@ export component RailRow inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         // Rows are separated by 2px in the drawer layout; extending the
-        // TouchArea 1px past both ends keeps rail-inside true when the
+        // TouchArea 1px past both ends keeps rail hover intact when the
         // stationary pointer ends up in a gap after the rail reflows on
-        // expansion (hover flap otherwise collapses the drawer).
+        // expansion.
         y: -1px;
         height: parent.height + 2px;
-        changed has-hover => { Theme.rail-inside = self.has-hover; }
         clicked => { root.clicked(); }
     }
     VerticalLayout {
@@ -361,12 +360,11 @@ export component SidebarRow inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         // Rows are separated by 2px in the drawer layout; extending the
-        // TouchArea 1px past both ends keeps rail-inside true when the
+        // TouchArea 1px past both ends keeps rail hover intact when the
         // stationary pointer ends up in a gap after the rail reflows on
-        // expansion (hover flap otherwise collapses the drawer).
+        // expansion.
         y: -1px;
         height: parent.height + 2px;
-        changed has-hover => { Theme.rail-inside = self.has-hover; }
         clicked => { root.clicked(); }
     }
     HorizontalLayout {
