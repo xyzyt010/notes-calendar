@@ -477,6 +477,24 @@ export component SearchBar inherits Rectangle {
                         clicked => { root.text = ""; root.cleared(); }
                         IconX { stroke-color: Theme.icon; preferred-width: 18px; preferred-height: 18px; }
                     }
+                    // Web .search .kbd: "Ctrl K" hint (Ctrl+K focuses search).
+                    if root.text == "":
+                        Rectangle {
+                            height: 22px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border-strong;
+                            VerticalLayout {
+                                alignment: center;
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                Text {
+                                    text: "Ctrl K";
+                                    font-size: 11px;
+                                    color: Theme.text-faint;
+                                }
+                            }
+                        }
                 }
             }
         }

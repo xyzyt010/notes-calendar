@@ -608,10 +608,23 @@ export component MainWindow inherits Window {
                                 }
                             }
                             Rectangle { horizontal-stretch: 1; }
-                            newNoteBtn := IconButton {
-                                size: 44px;
-                                clicked => { root.new-note(); }
-                                IconPlus { stroke-color: Theme.icon; preferred-width: 22px; preferred-height: 22px; }
+                            // Web .newbtn: 40px accent circle, on-accent plus.
+                            newNoteBtn := Rectangle {
+                                width: 40px;
+                                height: 40px;
+                                border-radius: 20px;
+                                background: Theme.accent;
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.new-note(); }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        IconPlus { stroke-color: Theme.on-accent; preferred-width: 22px; preferred-height: 22px; }
+                                    }
+                                }
                             }
                             // Webapp topbar right: [+] then sign-out (native maps it to
                             // locking the vault -> unlock screen, like the web's logout).
