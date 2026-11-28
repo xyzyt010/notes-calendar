@@ -169,8 +169,6 @@ export component MainWindow inherits Window {
     in-out property <int> drawer-trash-count: 0;
     in-out property <int> grid-cols: 4;
     in-out property <bool> rail-hover <=> Theme.rail-hover;
-    // Geometry-based rail-hover driving (see railCover): single writer.
-    in-out property <bool> rail-pos-inside: false;
     in-out property <bool> sidebar-open: false;
     in-out property <bool> rail-expanded: root.sidebar-open || root.rail-hover;
     // Drawer width is a plain length so absolute content positioning can follow
@@ -476,8 +474,8 @@ export component MainWindow inherits Window {
     changed has-note => {
         if root.has-note && !root.compact { root.modal-showing = true; }
     }
-    changed rail-pos-inside => {
-        if root.rail-pos-inside { railOpenTimer.restart(); } else { railCloseTimer.restart(); }
+    changed rail-inside => {
+        if root.rail-inside { railOpenTimer.restart(); } else { railCloseTimer.restart(); }
     }
     changed rail-expanded => {
         if !root.compact { root.drawer-width = root.rail-expanded ? 280px : 64px; }
@@ -493,13 +491,14 @@ export component MainWindow inherits Window {
 
     // Rail hover intent (web keep-app.js: pointerenter 130ms open,
     // pointerleave 340ms close, unless pinned via sidebar-open).
+    in-out property <bool> rail-inside <=> Theme.rail-inside;
     railOpenTimer := Timer {
         interval: 130ms;
-        triggered => { if root.rail-pos-inside { root.rail-hover = true; } }
+        triggered => { if root.rail-inside { root.rail-hover = true; } }
     }
     railCloseTimer := Timer {
         interval: 340ms;
-        triggered => { if !root.rail-pos-inside { root.rail-hover = false; } }
+        triggered => { if !root.rail-inside { root.rail-hover = false; } }
     }
 
     toastTimer := Timer {
@@ -659,14 +658,14 @@ export component MainWindow inherits Window {
                             animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                             background: Theme.drawer-bg;
                                 railTa := TouchArea {
-                                    // Hover is computed geometrically by
-                                    // railCover below; this area exists only so
-                                    // the empty rail regions report pointer
-                                    // presence to clicks going deeper.
+                                    // Empty-rail areas (gaps/padding): rows
+                                    // report their own has-hover; this layer
+                                    // reports the same state for the rest.
                                     x: 0px;
                                     y: 0px;
                                     width: 100%;
                                     height: 100%;
+                                    changed has-hover => { Theme.rail-inside = self.has-hover; }
                                 }
                                 VerticalLayout {
                                     padding-left: root.rail-expanded ? 13px : 10px;
@@ -1171,24 +1170,6 @@ export component MainWindow inherits Window {
                         }
                     }
             }
-
-                // Rail hover, geometry-based (web pointerenter/leave on the
-                // whole drawer). Per-row has-hover reporting is unreliable in
-                // Slint: rows swap on expansion, so leave events are lost and
-                // the rail sticks open. This full-window pass-through cover
-                // tracks pointer positions instead; events fall through to
-                // rows/buttons below (clicks and drags unaffected).
-                railCover := TouchArea {
-                    x: 0px;
-                    y: 0px;
-                    width: 100%;
-                    height: 100%;
-                    enabled: !root.compact;
-                    pointer-event(event) => {
-                        root.rail-pos-inside = self.mouse-x >= 0px && self.mouse-x < root.drawer-width && self.mouse-y >= 64px && self.mouse-y < root.height - 26px;
-                        return EventResult.reject;
-                    }
-                }
 
                 // ===== Editor More popover (web #ed-more-pop), screen-level overlay =====
                 // Web: width min(300px, vpw-16px), padding 12px, border var(--border),

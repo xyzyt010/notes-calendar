@@ -329,6 +329,7 @@ export component RailRow inherits Rectangle {
         // expansion.
         y: -1px;
         height: parent.height + 2px;
+        changed has-hover => { Theme.rail-inside = self.has-hover; }
         clicked => { root.clicked(); }
     }
     VerticalLayout {
@@ -365,6 +366,7 @@ export component SidebarRow inherits Rectangle {
         // expansion.
         y: -1px;
         height: parent.height + 2px;
+        changed has-hover => { Theme.rail-inside = self.has-hover; }
         clicked => { root.clicked(); }
     }
     HorizontalLayout {
