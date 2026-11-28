@@ -168,7 +168,7 @@ export component MainWindow inherits Window {
     in-out property <int> drawer-archive-count: 0;
     in-out property <int> drawer-trash-count: 0;
     in-out property <int> grid-cols: 4;
-    in-out property <bool> rail-hover: false;
+    in-out property <bool> rail-hover <=> Theme.rail-hover;
     in-out property <bool> sidebar-open: false;
     in-out property <bool> rail-expanded: root.sidebar-open || root.rail-hover;
     // Drawer width is a plain length so absolute content positioning can follow
@@ -474,6 +474,9 @@ export component MainWindow inherits Window {
     changed has-note => {
         if root.has-note && !root.compact { root.modal-showing = true; }
     }
+    changed rail-inside => {
+        if root.rail-inside { railOpenTimer.restart(); } else { railCloseTimer.restart(); }
+    }
     changed rail-expanded => {
         if !root.compact { root.drawer-width = root.rail-expanded ? 280px : 64px; }
     }
@@ -488,7 +491,7 @@ export component MainWindow inherits Window {
 
     // Rail hover intent (web keep-app.js: pointerenter 130ms open,
     // pointerleave 340ms close, unless pinned via sidebar-open).
-    in-out property <bool> rail-inside: false;
+    in-out property <bool> rail-inside <=> Theme.rail-inside;
     railOpenTimer := Timer {
         interval: 130ms;
         triggered => { if root.rail-inside { root.rail-hover = true; } }
@@ -655,10 +658,11 @@ export component MainWindow inherits Window {
                             animate width { duration: 180ms; easing: cubic-bezier(0.2, 0, 0, 1); }
                             background: Theme.drawer-bg;
                                 railTa := TouchArea {
-                                    changed has-hover => {
-                                        root.rail-inside = self.has-hover;
-                                        if self.has-hover { railOpenTimer.restart(); } else { railCloseTimer.restart(); }
-                                    }
+                                    x: 0px;
+                                    y: 0px;
+                                    width: 100%;
+                                    height: 100%;
+                                    changed has-hover => { Theme.rail-inside = self.has-hover; }
                                 }
                                 VerticalLayout {
                                     padding-left: root.rail-expanded ? 13px : 10px;
@@ -1452,6 +1456,8 @@ export component MainWindow inherits Window {
 
                 if root.show-settings:
                     SettingsView {
+                        x: root.compact ? 0px : root.drawer-width;
+                        width: parent.width - (root.compact ? 0px : root.drawer-width);
                         dark <=> root.dark;
                         neo <=> root.neo;
                         layout <=> root.layout-style;
@@ -1573,6 +1579,7 @@ export component MainWindow inherits Window {
                         TouchArea { clicked => { root.sidebar-open = false; } }
                     }
                     Rectangle {
+                        visible: root.compact && root.sidebar-open;
                         x: 0px; y: 56px;
                         width: min(280px, parent.width - parent.width / 5);
                         height: parent.height - 56px;

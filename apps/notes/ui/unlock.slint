@@ -23,6 +23,8 @@ export component UnlockOverlay inherits Rectangle {
     height: 100%;
     background: Theme.bg;
 
+    changed password => { if root.error != "" { root.error = ""; } }
+
     VerticalLayout {
         alignment: center;
         HorizontalLayout {
@@ -154,7 +156,7 @@ export component UnlockOverlay inherits Rectangle {
                         height: 18px;
                         text: root.error;
                         font-size: 13px;
-                        color: #D93025;
+                        color: Theme.danger;
                         wrap: word-wrap;
                     }
                     TextButton {

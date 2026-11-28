@@ -23,12 +23,16 @@ use ycore::storage::{notes as notes_store, open_notes_db};
 const NOTE_COLOR_HEX: [&str; 11] = [
     "#5C2B29", "#614A19", "#635D18", "#345920", "#16504B", "#2D555E", "#1E3A5F", "#42275E", "#5B2245", "#442F19", "#2C2D2F",
 ];
+const NOTE_COLOR_NAMES: [&str; 11] = [
+    "red", "orange", "yellow", "green", "cyan", "lightblue", "darkblue", "purple", "pink", "brown", "grey",
+];
 
 fn color_index(color: &Option<String>) -> i32 {
     match color {
         Some(c) => NOTE_COLOR_HEX
             .iter()
             .position(|h| h.eq_ignore_ascii_case(c))
+            .or_else(|| NOTE_COLOR_NAMES.iter().position(|name| name.eq_ignore_ascii_case(c)))
             .map(|i| i as i32 + 1)
             .unwrap_or(0),
         None => 0,
@@ -487,19 +491,15 @@ fn estimate_card_height_px_d(title: &str, preview: &str, clamp_lines: i32, card_
     (base + title_lines as f32 * pitch + body_lines as f32 * pitch).clamp(120.0, 1000.0)
 }
 
-/// Web --card-img per density (phone overrides to 110).
-fn card_image_height(density: &str, compact: bool) -> f32 {
-    if compact {
-        return 110.0;
-    }
-    match density {
-        "compact" => 120.0,
-        "roomy" => 240.0,
-        _ => 180.0,
-    }
-}
-
+// Web cards show no image strip; image height no longer budgeted.
 fn editor_body_height_px(body: &str, width_px: f32) -> f32 {
+    // Strict-checklist notes open in checklist mode: the editor renders
+    // 40px rows plus a 36px add-item row, not wrapped text lines — the
+    // line-based estimate clipped the last row into the scroll area.
+    if is_strict_checklist(body) {
+        let items = parse_checklist_items(body).len().max(1);
+        return (items as f32 * 44.0 + 46.0).clamp(140.0, 460.0);
+    }
     let cpl = ((width_px - 40.0) / 7.3).floor().max(24.0);
     let mut lines = 0usize;
     for line in body.lines() {
@@ -511,6 +511,62 @@ fn editor_body_height_px(body: &str, width_px: f32) -> f32 {
 
 fn styled_markdown(text: &str) -> slint::StyledText {
     slint::StyledText::from_markdown(text).unwrap_or_else(|_| slint::StyledText::from_plain_text(text))
+}
+
+/// Web card previews are RAW body text, but URLs still render as links
+/// (deployed webapp linkifies them). Raw `Text` cannot span-color, so the
+/// preview is rebuilt as markdown: every markdown special is escaped and
+/// each http(s) URL becomes a link. Returns None when there is no URL.
+fn linkified_preview(preview: &str) -> Option<slint::StyledText> {
+    if !(preview.contains("http://") || preview.contains("https://")) {
+        return None;
+    }
+    const SPECIALS: &[char] = &['\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!', '|', '<', '>'];
+    let chars: Vec<char> = preview.chars().collect();
+    let mut out = String::with_capacity(preview.len() + 32);
+    let mut i = 0usize;
+    let mut linked = false;
+    while i < chars.len() {
+        let rest: String = chars[i..].iter().collect();
+        let scheme = if rest.starts_with("https://") {
+            Some("https://")
+        } else if rest.starts_with("http://") {
+            Some("http://")
+        } else {
+            None
+        };
+        if let Some(scheme) = scheme {
+            let mut j = i + scheme.chars().count();
+            while j < chars.len() && !chars[j].is_whitespace() && chars[j] != '<' && chars[j] != '>' && chars[j] != '"' {
+                j += 1;
+            }
+            let mut url: String = chars[i..j].iter().collect();
+            while url.ends_with(['.', ',', ';', ':', '!', '?', ')', ']', '}']) {
+                url.pop();
+            }
+            if url.len() > scheme.len() {
+                out.push('[');
+                out.push_str(&url);
+                out.push_str("](");
+                out.push_str(&url);
+                out.push(')');
+                i += url.chars().count();
+                linked = true;
+                continue;
+            }
+        }
+        let c = chars[i];
+        if SPECIALS.contains(&c) {
+            out.push('\\');
+        }
+        out.push(c);
+        i += 1;
+    }
+    if linked {
+        Some(styled_markdown(&out))
+    } else {
+        None
+    }
 }
 
 /// Case-insensitive byte ranges of `query` inside `text` (char-safe).
@@ -855,13 +911,15 @@ fn note_to_data(s: &NoteSummary, prefs: &Prefs, card_w: f32, images: Vec<NoteIma
         // Web parity: card previews are the raw body text (markdown shown
         // literally, e.g. "# Welcome", "**Ctrl+N**"; app.js keeps newlines).
         preview: preview.into(),
+        preview_linked: linkified_preview(preview).unwrap_or_else(|| styled_markdown("")),
+        preview_has_link: preview.contains("http://") || preview.contains("https://"),
         date_label: rel_time(s.updated_at).into(),
         pinned: s.pinned,
         favorite: s.favorite,
         word_count: 0,
         color_index: color_index(&s.color),
         image_count: s.image_count as i32,
-        card_height: (estimate_card_height_px_d(title, preview, prefs.clamp, card_w, &prefs.density, false) + checklist_extra + if s.image_count > 0 { card_image_height(&prefs.density, false) } else { 0.0 }).min(1000.0),
+        card_height: estimate_card_height_px_d(title, preview, prefs.clamp, card_w, &prefs.density, false) + checklist_extra,
         render_md: prefs.md_cards,
         preview_styled: styled_markdown(preview),
         preview_highlighted,
@@ -1796,8 +1854,7 @@ fn toast(ui: &MainWindow, msg: &str) {
 }
 
 fn note_entry_d(s: &NoteSummary, prefs: &Prefs, card_w: f32, db: &rusqlite::Connection, key: Option<&ycore::crypto::VaultKey>, query: &str, compact: bool) -> (NoteData, f32) {
-    let height = estimate_card_height_px_d(&s.title, &s.preview, prefs.clamp, card_w, &prefs.density, compact)
-        + if s.image_count > 0 { card_image_height(&prefs.density, compact) } else { 0.0 };
+    let height = estimate_card_height_px_d(&s.title, &s.preview, prefs.clamp, card_w, &prefs.density, compact);
     (note_to_data(s, prefs, card_w, card_thumbnails(db, s.id, key), query), height)
 }
 
@@ -3048,6 +3105,7 @@ pub fn run_ui() -> anyhow::Result<()> {
                 _ => if has_digit && has_letter { 4 } else { 3 },
             };
             ui2.set_settings_password_strength(strength);
+            ui2.set_settings_security_error(SharedString::new());
         });
     }
     {
@@ -4209,6 +4267,22 @@ mod highlight_tests {
         assert_eq!(query_ranges("Über alles", "über"), vec![(0, 5)]);
         assert!(query_ranges("abc", "z").is_empty());
         assert!(query_ranges("abc", "").is_empty());
+    }
+
+    #[test]
+    fn linkified_previews_only_when_urls_present() {
+        assert!(linkified_preview("Visit https://example.com/spec for details.").is_some());
+        assert!(linkified_preview("see http://a.io/x)").is_some());
+        assert!(linkified_preview("no links here").is_none());
+        assert!(linkified_preview("").is_none());
+    }
+
+    #[test]
+    fn named_note_colors_map_to_keep_palette_indices() {
+        assert_eq!(color_index(&Some("red".into())), 1);
+        assert_eq!(color_index(&Some("LIGHTBLUE".into())), 6);
+        assert_eq!(color_index(&Some("#5C2B29".into())), 1);
+        assert_eq!(color_index(&None), 0);
     }
 
     #[test]

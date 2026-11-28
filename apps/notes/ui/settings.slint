@@ -338,7 +338,7 @@ export component SettingsView inherits Rectangle {
                                     horizontal-stretch: 1;
                                     height: 4px;
                                     border-radius: 2px;
-                                    background: (b + 1) <= root.password-strength ? Theme.accent : Theme.surface-3;
+                                    background: (b + 1) <= root.password-strength ? (root.password-strength == 1 ? #f28b82 : root.password-strength == 2 ? #fbbc04 : root.password-strength == 3 ? #81c995 : #9ad3a8) : Theme.surface-3;
                                 }
                         }
                         if root.security-error != "": Text { text: root.security-error; font-size: 11px; color: Theme.danger; } HorizontalLayout { alignment: end; spacing: 6px; TextButton { label: "Cancel"; clicked => { root.security-mode = 0; } } TextButton { label: "Encrypt notes"; emphasis: true; clicked => { root.create-vault(root.new-password, root.confirm-password); } } } } }

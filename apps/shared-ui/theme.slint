@@ -14,19 +14,21 @@ export global Theme {
     // Master switch. Toggled from settings; everything derives from it.
     in-out property <bool> dark: true;
     in-out property <bool> neo: false;
+    in-out property <bool> rail-hover: false;
+    in-out property <bool> rail-inside: false;
 
-    // ---- Backgrounds (Google Keep — matches the deployed site exactly) ----
-    out property <color> bg:            neo ? (dark ? #202124 : #E8EAED) : (dark ? #121212 : #FFFFFF);
-    out property <color> surface:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1B1B1B : #F1F3F4);
-    out property <color> surface-2:     neo ? (dark ? #23262D : #E8EAED) : (dark ? #2A2B2D : #F1F3F4);
-    out property <color> surface-3:     neo ? (dark ? #2A2D34 : #E8EAED) : (dark ? #333639 : #E8EAED);
-    out property <color> card-bg:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1F1F1F : #FFFFFF);  // cards & composer
+    // ---- Backgrounds (web/suite/static/notes.html :root tokens) ----
+    out property <color> bg:            neo ? (dark ? #202124 : #E8EAED) : (dark ? #131314 : #FFFFFF);
+    out property <color> surface:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1b1c1d : #F1F3F4);
+    out property <color> surface-2:     neo ? (dark ? #23262D : #E8EAED) : (dark ? #232425 : #F1F3F4);
+    out property <color> surface-3:     neo ? (dark ? #2A2D34 : #E8EAED) : (dark ? #2b2c2e : #E8EAED);
+    out property <color> card-bg:       neo ? (dark ? #202124 : #E8EAED) : (dark ? #1b1c1d : #FFFFFF);  // cards & composer (web .card uses --surface)
     out property <color> neo-card:      #202124;
     out property <color> neo-raised:    #23262D;
     out property <color> neo-inset:     #14161A;
-    out property <color> border:        dark ? #5F6368 : #DDDDDD;
-    out property <color> border-strong: dark ? #5F6368 : #C7C9CC;
-    out property <color> divider:       dark ? #2C2D2F : #E8EAED;  // hairline separators
+    out property <color> border:        dark ? #2b2c2e : #DDDDDD;
+    out property <color> border-strong: dark ? #3c3d40 : #C7C9CC;
+    out property <color> divider:       dark ? #2b2c2e : #E8EAED;  // hairline separators
     out property <color> icon-hover-bg: dark ? rgba(255,255,255,0.10) : rgba(95,99,104,0.08);
     out property <color> drawer-bg:     neo ? (dark ? #202124 : #E8EAED) : (dark ? #1B1B1B : #FFFFFF);
     out property <color> drawer-active: dark ? #47484C : #FDD663;
@@ -36,9 +38,9 @@ export global Theme {
     // ---- Text ----
     out property <color> text:          dark ? #e8eaed : #202124;
     out property <color> text-dim:      dark ? #9aa0a6 : #5f6368;
-    out property <color> text-faint:    dark ? #9aa0a6 : #5f6368;
-    out property <color> card-title-ink: dark ? #ffffff : #202124;  // --card-title-ink
-    out property <color> card-body-ink:  dark ? #c7ccd1 : #5f6368;  // --card-body-ink
+    out property <color> text-faint:    dark ? #6f747b : #5f6368;
+    out property <color> card-title-ink: dark ? #e8eaed : #202124;  // web .card-title inherits --text
+    out property <color> card-body-ink:  dark ? #9aa0a6 : #5f6368;  // web .card-preview --text-dim
 
     // Web search <mark> fill (--mark-bg). The 1px web border is #F9AB00.
     out property <color> mark-bg:       dark ? #614A19 : #FDE293;
@@ -50,7 +52,7 @@ export global Theme {
     out property <color> on-accent:     dark ? #0B326E : #FFFFFF;
     out property <color> accent-soft:   dark ? #AECBFA29 : #1A73E81F; // ~16% / ~12%
 
-    out property <color> danger:        dark ? #F28B82 : #D93025;   // Keep danger
+    out property <color> danger:        dark ? #f2b8b5 : #D93025;   // web --danger
     out property <color> danger-soft:   dark ? #f2b8b520 : #b3261a12;
 
     out property <color> success:       dark ? #9ad3a8 : #146c2e;
