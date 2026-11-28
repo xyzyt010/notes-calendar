@@ -161,7 +161,7 @@ export component UnlockOverlay inherits Rectangle {
                     }
                     TextButton {
                         label: root.mode == 1 ? "Unlock" : "Create vault";
-                        emphasis: true;
+                        accent: true;
                         btn-h: 44px;
                         clicked => {
                             if root.mode == 1 { root.unlock(); } else { root.create-vault(); }

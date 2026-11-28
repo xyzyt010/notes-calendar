@@ -69,7 +69,7 @@ impl Default for Prefs {
             sort: NotesSort::Updated,
             pinned_first: true,
             md_cards: false,
-            show_dates: false,
+            show_dates: true,
             clamp: 0,
         }
     }

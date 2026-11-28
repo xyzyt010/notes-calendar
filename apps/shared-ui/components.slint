@@ -1142,6 +1142,7 @@ export component NoteCard inherits Rectangle {
 export component TextButton inherits Rectangle {
     in property <string> label;
     in-out property <bool> emphasis: false;
+    in-out property <bool> accent: false; // web #login button: accent bg + on-accent ink
     in-out property <bool> danger: false;
     in property <bool> text-only: false; // web .btn-text: transparent bg, text-sec ink, 500 14px
     in property <length> btn-h: 0px; // web overrides (auth-actions 44px)
@@ -1153,7 +1154,9 @@ export component TextButton inherits Rectangle {
     border-radius: root.text-only ? 9px : 9px;
     background: root.text-only
         ? (ta.has-hover ? Theme.icon-hover-bg : transparent)
-        : root.danger
+        : root.accent
+            ? Theme.accent
+            : root.danger
             ? (ta.has-hover ? Theme.danger-soft : Theme.danger-soft)
             : (root.emphasis
                 ? (ta.has-hover ? (Theme.dark ? #2A2B2D : #F1F3F4) : (Theme.dark ? #1F1F1F : #FFFFFF))
@@ -1172,7 +1175,7 @@ export component TextButton inherits Rectangle {
             text: root.label;
             font-size: root.text-only ? 14px : 13.5px;
             font-weight: root.text-only ? 500 : 600;
-            color: root.danger ? Theme.danger : (root.text-only ? (ta.has-hover ? Theme.text : Theme.text-dim) : (root.emphasis ? (Theme.dark ? #E8EAED : #3C4043) : Theme.text));
+            color: root.accent ? Theme.on-accent : root.danger ? Theme.danger : (root.text-only ? (ta.has-hover ? Theme.text : Theme.text-dim) : (root.emphasis ? (Theme.dark ? #E8EAED : #3C4043) : Theme.text));
             horizontal-alignment: center;
         }
     }
